@@ -128,14 +128,15 @@ class ABSADataset(Dataset):
         fin = open(fname, 'r', encoding='utf-8', newline='\n', errors='ignore')
         lines = fin.readlines()
         fin.close()
-        fin = open(fname+'.graph', 'rb')
-        idx2graph = pickle.load(fin)
-        fin.close()
+        # fin = open(fname+'.graph', 'rb')
+        # idx2graph = pickle.load(fin)
+        # fin.close()
 
         all_data = []
         for i in range(0, len(lines), 3):
-            text_left, _, text_right = [s.lower().strip() for s in lines[i].partition("$T$")]
+            # text_left, _, text_right = [s.lower().strip() for s in lines[i].partition("$T$")]
             aspect = lines[i + 1].lower().strip()
+            text_left, _, text_right = [s.lower().strip() for s in lines[i].partition(aspect)]
             polarity = lines[i + 2].strip()
 
             text_indices = tokenizer.text_to_sequence(text_left + " " + aspect + " " + text_right)
@@ -158,8 +159,8 @@ class ABSADataset(Dataset):
             text_bert_indices = tokenizer.text_to_sequence("[CLS] " + text_left + " " + aspect + " " + text_right + " [SEP]")
             aspect_bert_indices = tokenizer.text_to_sequence("[CLS] " + aspect + " [SEP]")
 
-            dependency_graph = np.pad(idx2graph[i], \
-                ((0,tokenizer.max_seq_len-idx2graph[i].shape[0]),(0,tokenizer.max_seq_len-idx2graph[i].shape[0])), 'constant')
+            # dependency_graph = np.pad(idx2graph[i], \
+            #     ((0,tokenizer.max_seq_len-idx2graph[i].shape[0]),(0,tokenizer.max_seq_len-idx2graph[i].shape[0])), 'constant')
 
             data = {
                 'concat_bert_indices': concat_bert_indices,
@@ -174,7 +175,8 @@ class ABSADataset(Dataset):
                 'right_with_aspect_indices': right_with_aspect_indices,
                 'aspect_indices': aspect_indices,
                 'aspect_boundary': aspect_boundary,
-                'dependency_graph': dependency_graph,
+                # 'dependency_graph': dependency_graph,
+                # 'dependency_graph': None,
                 'polarity': polarity,
             }
 
