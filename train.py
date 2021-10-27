@@ -180,7 +180,11 @@ class Instructor:
         best_model_path = self._train(criterion, optimizer, train_data_loader, val_data_loader)
         self.model.load_state_dict(torch.load(best_model_path))
         print("load model from %s" % best_model_path)
+        train_acc, train_f1 = self._evaluate_acc_f1(train_data_loader)
+        val_acc, val_f1 = self._evaluate_acc_f1(val_data_loader)
         test_acc, test_f1 = self._evaluate_acc_f1(test_data_loader)
+        logger.info('>> train_acc: {:.4f}, train_f1: {:.4f}'.format(train_acc, train_f1))
+        logger.info('>> val_acc: {:.4f}, val_f1: {:.4f}'.format(val_acc, val_f1))
         logger.info('>> test_acc: {:.4f}, test_f1: {:.4f}'.format(test_acc, test_f1))
 
 
