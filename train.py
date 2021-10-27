@@ -175,6 +175,7 @@ class Instructor:
         self._reset_params()
         best_model_path = self._train(criterion, optimizer, train_data_loader, val_data_loader)
         self.model.load_state_dict(torch.load(best_model_path))
+        print("load model from %s" % best_model_path)
         test_acc, test_f1 = self._evaluate_acc_f1(test_data_loader)
         logger.info('>> test_acc: {:.4f}, test_f1: {:.4f}'.format(test_acc, test_f1))
 
@@ -255,7 +256,7 @@ def main():
         },
         'xp': {
             'train': './datasets/xp/train.txt',
-            'test': './datasets/xp/train.txt'
+            'test': './datasets/xp/test.txt'
         }
     }
     input_colses = {
