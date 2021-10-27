@@ -111,13 +111,17 @@ class Instructor:
                 loss.backward()
                 optimizer.step()
 
-                n_correct += (torch.argmax(outputs, -1) == targets).sum().item()
-                n_total += len(outputs)
-                loss_total += loss.item() * len(outputs)
+                batch_sz = len(outputs)
+                batch_correct = (torch.argmax(outputs, -1) == targets).sum().item()
+                batch_acc = 1.0*batch_correct/batch_sz
+                n_correct += batch_correct
+                n_total += batch_sz
+                batch_loss = loss.item()
+                loss_total += batch_loss * batch_sz
                 if global_step % self.opt.log_step == 0:
                     train_acc = n_correct / n_total
                     train_loss = loss_total / n_total
-                    logger.info('loss: {:.4f}, acc: {:.4f}'.format(train_loss, train_acc))
+                    logger.info('steps: {:d}, total avg loss: {:.4f}, batch_loss: {:.4f}, total avg acc: {:.4f}, batch_acc: {: .4f}, lr: {.4f}'.format(global_step, train_loss, batch_loss, train_acc, batch_acc, optimizer.lr))
 
             val_acc, val_f1 = self._evaluate_acc_f1(val_data_loader)
             logger.info('> val_acc: {:.4f}, val_f1: {:.4f}'.format(val_acc, val_f1))
