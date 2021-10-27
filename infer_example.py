@@ -36,7 +36,7 @@ class Inferer:
                 embed_dim=opt.embed_dim,
                 dat_fname='{0}_{1}_embedding_matrix.dat'.format(str(opt.embed_dim), opt.dataset))
             self.model = opt.model_class(embedding_matrix, opt)
-        print('loading model {0} from {1}'format(opt.model_name, opt.state_dict_path))
+        print('loading model {0} from {1}'.format(opt.model_name, opt.state_dict_path))
         self.model.load_state_dict(torch.load(opt.state_dict_path))
         self.model = self.model.to(opt.device)
         # switch model to evaluation mode
@@ -106,7 +106,7 @@ if __name__ == '__main__':
         'ram': RAM,
         'cabasc': Cabasc,
         'tnet_lf': TNet_LF,
-       'aoa': AOA,
+        'aoa': AOA,
         'mgan': MGAN,
         'asgcn': ASGCN,
         'bert_spc': BERT_SPC,
@@ -162,7 +162,7 @@ if __name__ == '__main__':
     opt.state_dict_path = 'state_dict/bert_spc_xp_val_acc_0.9057'
     opt.embed_dim = 300
     opt.hidden_dim = 300
-    opt.max_seq_len = 85
+    opt.max_seq_len = 40
     opt.bert_dim = 768
     # opt.pretrained_bert_name = 'bert-base-uncased'
     opt.pretrained_bert_name = '/data/zhanzhiqiang/models/bert-base-chinese'
