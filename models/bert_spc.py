@@ -1,8 +1,10 @@
-# -*- coding: utf-8 -*-
-# file: BERT_SPC.py
-# author: songyouwei <youwei0314@gmail.com>
-# Copyright (C) 2019. All Rights Reserved.
-import torch
+# !/usr/bin/env python
+# encoding=utf-8
+# author: zhanzq
+# email : zhanzhiqiang09@126.com
+# date  : 2021/11/3
+#
+
 import torch.nn as nn
 
 
