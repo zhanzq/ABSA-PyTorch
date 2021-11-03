@@ -1,3 +1,10 @@
+# !/usr/bin/env python
+# encoding=utf-8
+# author: zhanzq
+# email : zhanzhiqiang09@126.com 
+# date  : 2021/11/3
+#
+
 import os
 import sys
 import math
@@ -158,7 +165,8 @@ class Instructor:
                     t_outputs_all = torch.cat((t_outputs_all, t_outputs), dim=0)
 
         acc = n_correct / n_total
-        f1 = metrics.f1_score(t_targets_all.cpu(), torch.argmax(t_outputs_all, -1).cpu(), labels=[0, 1, 2], average="macro")
+        f1 = metrics.f1_score(t_targets_all.cpu(), torch.argmax(t_outputs_all, -1).cpu(),
+                              labels=[0, 1, 2], average="macro")
         return acc, f1
 
     def run(self):
@@ -207,11 +215,13 @@ def main():
     parser.add_argument("--device", default=None, type=str, help="e.g. cuda:0")
     parser.add_argument("--data_dir", default="datasets/xp/", type=str, help="xp dataset")
     parser.add_argument("--seed", default=1234, type=int, help="set seed for reproducibility")
-    # parser.add_argument("--valid_dataset_ratio", default=0, type=float, help="set ratio between 0 and 1 for validation support")
-    parser.add_argument("--valid_dataset_ratio", default=0.1, type=float, help="set ratio between 0 and 1 for validation support")
+    parser.add_argument("--valid_dataset_ratio", default=0.1, type=float,
+                        help="set ratio between 0 and 1 for validation support")
+
     # The following parameters are only valid for the lcf-bert model
     parser.add_argument("--local_context_focus", default="cdm", type=str, help="local context focus mode, cdw or cdm")
-    parser.add_argument("--SRD", default=3, type=int, help="semantic-relative-distance, see the paper of LCF-BERT model")
+    parser.add_argument("--SRD", default=3, type=int,
+                        help="semantic-relative-distance, see the paper of LCF-BERT model")
     opt = parser.parse_args()
 
     if opt.seed is not None:
@@ -219,66 +229,62 @@ def main():
         numpy.random.seed(opt.seed)
         torch.manual_seed(opt.seed)
         torch.cuda.manual_seed(opt.seed)
-        torch.backends.cudnn.deterministic = True
         torch.backends.cudnn.benchmark = False
+        torch.backends.cudnn.deterministic = True
         os.environ["PYTHONHASHSEED"] = str(opt.seed)
 
     model_classes = {
-        "lstm": LSTM,
-        "td_lstm": TD_LSTM,
-        "tc_lstm": TC_LSTM,
-        "atae_lstm": ATAE_LSTM,
-        "ian": IAN,
-        "memnet": MemNet,
-        "ram": RAM,
-        "cabasc": Cabasc,
-        "tnet_lf": TNet_LF,
-        "aoa": AOA,
-        "mgan": MGAN,
-        "asgcn": ASGCN,
-        "bert_spc": BERT_SPC,
-        "aen_bert": AEN_BERT,
-        "lcf_bert": LCF_BERT,
-        # default hyper-parameters for LCF-BERT model is as follws:
-        # lr: 2e-5
-        # l2: 1e-5
-        # batch size: 16
-        # num epochs: 5
+        'aoa': AOA,
+        'ian': IAN,
+        'ram': RAM,
+        'mgan': MGAN,
+        'asgcn': ASGCN,
+        'memnet': MemNet,
+        'cabasc': Cabasc,
+        'tnet_lf': TNet_LF,
+        'bert_spc': BERT_SPC,
+        'aen_bert': AEN_BERT,
+        'lcf_bert': LCF_BERT,
+        'lstm': LSTM,
+        'td_lstm': TD_LSTM,
+        'tc_lstm': TC_LSTM,
+        'atae_lstm': ATAE_LSTM,
     }
     dataset_files = {
-        "xp": {
-            "train": "./datasets/xp/train.txt",
+        'xp': {
+            'train': './datasets/xp/train.txt',
+            'test': './datasets/xp/train.txt',
         },
-        "twitter": {
-            "train": "./datasets/acl-14-short-data/train.raw",
-            "test": "./datasets/acl-14-short-data/test.raw"
+        'twitter': {
+            'train': './datasets/acl-14-short-data/train.raw',
+            'test': './datasets/acl-14-short-data/test.raw'
         },
-        "restaurant": {
-            "train": "./datasets/semeval14/Restaurants_Train.xml.seg",
-            "test": "./datasets/semeval14/Restaurants_Test_Gold.xml.seg"
+        'restaurant': {
+            'train': './datasets/semeval14/Restaurants_Train.xml.seg',
+            'test': './datasets/semeval14/Restaurants_Test_Gold.xml.seg'
         },
-        "laptop": {
-            "train": "./datasets/semeval14/Laptops_Train.xml.seg",
-            "test": "./datasets/semeval14/Laptops_Test_Gold.xml.seg"
+        'laptop': {
+            'train': './datasets/semeval14/Laptops_Train.xml.seg',
+            'test': './datasets/semeval14/Laptops_Test_Gold.xml.seg'
         },
     }
 
     input_cols = {
-        "lstm": ["text_indices"],
-        "ian": ["text_indices", "aspect_indices"],
-        "aoa": ["text_indices", "aspect_indices"],
-        "atae_lstm": ["text_indices", "aspect_indices"],
-        "td_lstm": ["left_with_aspect_indices", "right_with_aspect_indices"],
-        "tc_lstm": ["left_with_aspect_indices", "right_with_aspect_indices", "aspect_indices"],
-        "memnet": ["context_indices", "aspect_indices"],
-        "ram": ["text_indices", "aspect_indices", "left_indices"],
-        "cabasc": ["text_indices", "aspect_indices", "left_with_aspect_indices", "right_with_aspect_indices"],
-        "tnet_lf": ["text_indices", "aspect_indices", "aspect_boundary"],
-        "mgan": ["text_indices", "aspect_indices", "left_indices"],
-        "asgcn": ["text_indices", "aspect_indices", "left_indices", "dependency_graph"],
-        "bert_spc": ["concat_bert_indices", "concat_segments_indices"],
-        "aen_bert": ["text_bert_indices", "aspect_bert_indices"],
-        "lcf_bert": ["concat_bert_indices", "concat_segments_indices", "text_bert_indices", "aspect_bert_indices"],
+        'lstm': ['text_indices'],
+        'aoa': ['text_indices', 'aspect_indices'],
+        'ian': ['text_indices', 'aspect_indices'],
+        'atae_lstm': ['text_indices', 'aspect_indices'],
+        'memnet': ['context_indices', 'aspect_indices'],
+        'aen_bert': ['text_bert_indices', 'aspect_bert_indices'],
+        'ram': ['text_indices', 'aspect_indices', 'left_indices'],
+        'mgan': ['text_indices', 'aspect_indices', 'left_indices'],
+        'bert_spc': ['concat_bert_indices', 'concat_segments_indices'],
+        'tnet_lf': ['text_indices', 'aspect_indices', 'aspect_in_text'],
+        'asgcn': ['text_indices', 'aspect_indices', 'left_indices', 'dependency_graph'],
+        'cabasc': ['text_indices', 'aspect_indices', 'left_with_aspect_indices', 'right_with_aspect_indices'],
+        'lcf_bert': ['concat_bert_indices', 'concat_segments_indices', 'text_bert_indices', 'aspect_bert_indices'],
+        'td_lstm': ['left_with_aspect_indices', 'right_with_aspect_indices'],
+        'tc_lstm': ['left_with_aspect_indices', 'right_with_aspect_indices', 'aspect_indices'],
     }
 
     initializers = {
@@ -287,21 +293,26 @@ def main():
         "orthogonal_": torch.nn.init.orthogonal_,
     }
     optimizers = {
-        "adadelta": torch.optim.Adadelta,  # default lr=1.0
-        "adagrad": torch.optim.Adagrad,  # default lr=0.01
+        "sgd": torch.optim.SGD,
+        "asgd": torch.optim.ASGD,  # default lr=0.01
         "adam": torch.optim.Adam,  # default lr=0.001
         "adamax": torch.optim.Adamax,  # default lr=0.002
-        "asgd": torch.optim.ASGD,  # default lr=0.01
         "rmsprop": torch.optim.RMSprop,  # default lr=0.01
-        "sgd": torch.optim.SGD,
+        "adagrad": torch.optim.Adagrad,  # default lr=0.01
+        "adadelta": torch.optim.Adadelta,  # default lr=1.0
     }
+    opt.optimizer = optimizers[opt.optimizer]
+    opt.inputs_cols = input_cols[opt.model_name]
     opt.model_class = model_classes[opt.model_name]
     opt.dataset_file = dataset_files[opt.dataset]
-    opt.inputs_cols = input_cols[opt.model_name]
-    opt.initializer = initializers[opt.initializer]
-    opt.optimizer = optimizers[opt.optimizer]
-    opt.device = torch.device("cuda" if torch.cuda.is_available() else "cpu") \
-        if opt.device is None else torch.device(opt.device)
+    opt.initializer = initializers[str(opt.initializer)]
+    if opt.device is None:
+        if torch.cuda.is_available():
+            opt.device = torch.device("cuda")
+        else:
+            opt.device = torch.device("cpu")
+    else:
+        opt.device = torch.device(str(opt.device))
 
     log_file = "{}-{}-{}.log".format(opt.model_name, opt.dataset, strftime("%y%m%d-%H%M", localtime()))
     logger.addHandler(logging.FileHandler(log_file))
