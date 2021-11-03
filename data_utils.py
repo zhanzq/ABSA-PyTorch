@@ -1,35 +1,39 @@
-# -*- coding: utf-8 -*-
-# file: data_utils.py
-# author: songyouwei <youwei0314@gmail.com>
-# Copyright (C) 2018. All Rights Reserved.
+# !/usr/bin/env python
+# encoding=utf-8
+# author: zhanzq
+# email : zhanzhiqiang09@126.com 
+# date  : 2021/11/3
+#
 
 import os
+import re
 import pickle
+import random
 import numpy as np
-import torch
 from torch.utils.data import Dataset
 from transformers import BertTokenizer
 
 
-def build_tokenizer(fnames, max_seq_len, dat_fname):
-    if os.path.exists(dat_fname):
-        print('loading tokenizer:', dat_fname)
-        tokenizer = pickle.load(open(dat_fname, 'rb'))
+def build_tokenizer(data_files, max_seq_len, tokenizer_file):
+    if os.path.exists(tokenizer_file):
+        print('loading tokenizer:', tokenizer_file)
+        tokenizer = pickle.load(open(tokenizer_file, 'rb'))
     else:
         text = ''
-        for fname in fnames:
-            fin = open(fname, 'r', encoding='utf-8', newline='\n', errors='ignore')
+        for data_file in data_files:
+            fin = open(data_file, 'r', encoding='utf-8', newline='\n', errors='ignore')
             lines = fin.readlines()
             fin.close()
             for i in range(0, len(lines), 3):
-                text_left, _, text_right = [s.lower().strip() for s in lines[i].partition("$T$")]
-                aspect = lines[i + 1].lower().strip()
+                text_i = lines[i].lower().strip()
+                aspect = lines[i+1].lower().strip()
+                text_left, _, text_right = [s.lower().strip() for s in text_i.partition("$T$")]
                 text_raw = text_left + " " + aspect + " " + text_right
                 text += text_raw + " "
 
         tokenizer = Tokenizer(max_seq_len)
         tokenizer.fit_on_text(text)
-        pickle.dump(tokenizer, open(dat_fname, 'wb'))
+        pickle.dump(tokenizer, open(tokenizer_file, 'wb'))
     return tokenizer
 
 
@@ -44,32 +48,32 @@ def _load_word_vec(path, word2idx=None, embed_dim=300):
     return word_vec
 
 
-def build_embedding_matrix(word2idx, embed_dim, dat_fname):
-    if os.path.exists(dat_fname):
-        print('loading embedding_matrix:', dat_fname)
-        embedding_matrix = pickle.load(open(dat_fname, 'rb'))
+def build_embedding_matrix(word2idx, embed_dim, embedding_file):
+    if os.path.exists(embedding_file):
+        print('loading embedding_matrix:', embedding_file)
+        embedding_matrix = pickle.load(open(embedding_file, 'rb'))
     else:
         print('loading word vectors...')
         embedding_matrix = np.zeros((len(word2idx) + 2, embed_dim))  # idx 0 and len(word2idx)+1 are all-zeros
-        fname = './glove.twitter.27B/glove.twitter.27B.' + str(embed_dim) + 'd.txt' \
+        embedding_file = './glove.twitter.27B/glove.twitter.27B.' + str(embed_dim) + 'd.txt' \
             if embed_dim != 300 else './glove.42B.300d.txt'
-        word_vec = _load_word_vec(fname, word2idx=word2idx, embed_dim=embed_dim)
-        print('building embedding_matrix:', dat_fname)
+        word_vec = _load_word_vec(embedding_file, word2idx=word2idx, embed_dim=embed_dim)
+        print('building embedding_matrix:', embedding_file)
         for word, i in word2idx.items():
             vec = word_vec.get(word)
             if vec is not None:
                 # words not found in embedding index will be all-zeros.
                 embedding_matrix[i] = vec
-        pickle.dump(embedding_matrix, open(dat_fname, 'wb'))
+        pickle.dump(embedding_matrix, open(embedding_file, 'wb'))
     return embedding_matrix
 
 
-def pad_and_truncate(sequence, maxlen, dtype='int64', padding='post', truncating='post', value=0):
-    x = (np.ones(maxlen) * value).astype(dtype)
+def pad_and_truncate(sequence, max_len, dtype='int64', padding='post', truncating='post', value=0):
+    x = (np.ones(max_len) * value).astype(dtype)
     if truncating == 'pre':
-        trunc = sequence[-maxlen:]
+        trunc = sequence[-max_len:]
     else:
-        trunc = sequence[:maxlen]
+        trunc = sequence[:max_len]
     trunc = np.asarray(trunc, dtype=dtype)
     if padding == 'post':
         x[:len(trunc)] = trunc
@@ -100,8 +104,8 @@ class Tokenizer(object):
         if self.lower:
             text = text.lower()
         words = text.split()
-        unknownidx = len(self.word2idx)+1
-        sequence = [self.word2idx[w] if w in self.word2idx else unknownidx for w in words]
+        unk_idx = len(self.word2idx)+1
+        sequence = [self.word2idx[w] if w in self.word2idx else unk_idx for w in words]
         if len(sequence) == 0:
             sequence = [0]
         if reverse:
@@ -111,8 +115,8 @@ class Tokenizer(object):
 
 class Tokenizer4Bert:
     def __init__(self, max_seq_len, pretrained_bert_name):
-        self.tokenizer = BertTokenizer.from_pretrained(pretrained_bert_name)
         self.max_seq_len = max_seq_len
+        self.tokenizer = BertTokenizer.from_pretrained(pretrained_bert_name)
 
     def text_to_sequence(self, text, reverse=False, padding='post', truncating='post'):
         sequence = self.tokenizer.convert_tokens_to_ids(self.tokenizer.tokenize(text))
@@ -123,65 +127,116 @@ class Tokenizer4Bert:
         return pad_and_truncate(sequence, self.max_seq_len, padding=padding, truncating=truncating)
 
 
+def rm_punctuation(text):
+    punctuations = [",", "，", ".", "。", "?", "？", ":", "：", "!", "！", "'", "\"", "、"]
+    for pun in punctuations:
+        text = re.sub(pun, "", text)
+    return text
+
+
+def get_example(utt, aspect, polar=None, with_punctuation=False, tokenizer=None):
+    polarity = None
+    if polar is not None:
+        polarity = int(polar) + 1
+    if not with_punctuation:
+        utt = rm_punctuation(text=utt)
+
+    text_left, _, text_right = [s.strip() for s in utt.partition(aspect)]
+
+    text_indices = tokenizer.text_to_sequence(utt)
+    aspect_indices = tokenizer.text_to_sequence(aspect)
+    left_indices = tokenizer.text_to_sequence(text_left)
+    right_indices = tokenizer.text_to_sequence(text_right, reverse=True)
+    context_indices = tokenizer.text_to_sequence(text_left + text_right)
+    left_with_aspect_indices = tokenizer.text_to_sequence(text_left + aspect)
+    right_with_aspect_indices = tokenizer.text_to_sequence(aspect + text_right, reverse=True)
+
+    left_len = np.sum(left_indices != 0)
+    text_len = np.sum(text_indices != 0)
+    aspect_len = np.sum(aspect_indices != 0)
+    aspect_boundary = np.asarray([left_len, left_len + aspect_len - 1], dtype=np.int64)
+
+    concat_bert_indices = tokenizer.text_to_sequence('[CLS]' + utt + '[SEP]' + aspect + "[SEP]")
+    concat_segments_indices = [0] * (text_len + 2) + [1] * (aspect_len + 1)
+    concat_segments_indices = pad_and_truncate(concat_segments_indices, tokenizer.max_seq_len)
+
+    text_bert_indices = tokenizer.text_to_sequence("[CLS]" + utt + "[SEP]")
+    aspect_bert_indices = tokenizer.text_to_sequence("[CLS]" + aspect + "[SEP]")
+
+    data = {
+        'polarity': polarity,
+        'text_indices': text_indices,
+        'left_indices': left_indices,
+        'right_indices': right_indices,
+        'aspect_indices': aspect_indices,
+        'context_indices': context_indices,
+        'aspect_boundary': aspect_boundary,
+        'text_bert_indices': text_bert_indices,
+        'aspect_bert_indices': aspect_bert_indices,
+        'concat_bert_indices': concat_bert_indices,
+        'concat_segments_indices': concat_segments_indices,
+        'left_with_aspect_indices': left_with_aspect_indices,
+        'right_with_aspect_indices': right_with_aspect_indices,
+    }
+
+    return data
+
+
+def get_dataset(lines, with_punctuation=False, tokenizer=None):
+    all_data = []
+    for line in lines:
+        items = line.split("\t")
+        assert len(items) == 3, "valid record must contain 3 columns, bad record: {:s}".format(line)
+        utt, aspect, polar = items
+        data = get_example(utt=utt, aspect=aspect, polar=polar, with_punctuation=with_punctuation, tokenizer=tokenizer)
+        all_data.append(data)
+
+    return all_data
+
+
+def load_data(data_dir, with_punctuation=False, tokenizer=None, do_shuffle=True, splits=(0.7, 0.2, 0.1)):
+    train_lines, valid_lines, test_lines = [], [], []
+    assert type(data_dir) is dir, "input path must be data dir"
+    files = os.listdir(data_dir)
+    for file_name in files:
+        data_path = os.path.join(data_dir, file_name)
+        if "train" in file_name:
+            with open(data_path, "r", encoding="utf-8", newline="\n", errors="ignore") as reader:
+                lines = reader.readlines()
+                train_lines.extend(lines)
+        elif "valid" in file_name:
+            with open(data_path, "r", encoding="utf-8", newline="\n", errors="ignore") as reader:
+                lines = reader.readlines()
+                train_lines.extend(lines)
+        elif "test" in file_name:
+            with open(data_path, "r", encoding="utf-8", newline="\n", errors="ignore") as reader:
+                lines = reader.readlines()
+                train_lines.extend(lines)
+        else:
+            print("irrelevant data file: {:s}".format(data_path))
+    train_sz = len(train_lines)
+    if do_shuffle:
+        random.shuffle(train_lines)
+    total_sz = train_sz
+    if len(test_lines) == 0:
+        test_sz = int(total_sz*splits[2])
+        train_sz -= test_sz
+        test_lines = train_lines[-test_sz:]
+    if len(valid_lines) == 0:
+        valid_sz = int(total_sz*splits[1])
+        train_sz -= valid_sz
+        valid_lines = train_lines[train_sz:train_sz + valid_sz]
+
+    train_data = get_dataset(train_lines, with_punctuation=with_punctuation, tokenizer=tokenizer)
+    valid_data = get_dataset(valid_lines, with_punctuation=with_punctuation, tokenizer=tokenizer)
+    test_data = get_dataset(test_lines, with_punctuation=with_punctuation, tokenizer=tokenizer)
+
+    return train_data, valid_data, test_data
+
+
 class ABSADataset(Dataset):
-    def __init__(self, fname, tokenizer):
-        fin = open(fname, 'r', encoding='utf-8', newline='\n', errors='ignore')
-        lines = fin.readlines()
-        fin.close()
-        # fin = open(fname+'.graph', 'rb')
-        # idx2graph = pickle.load(fin)
-        # fin.close()
-
-        all_data = []
-        for i in range(0, len(lines), 3):
-            # text_left, _, text_right = [s.lower().strip() for s in lines[i].partition("$T$")]
-            aspect = lines[i + 1].lower().strip()
-            text_left, _, text_right = [s.lower().strip() for s in lines[i].partition(aspect)]
-            polarity = lines[i + 2].strip()
-
-            text_indices = tokenizer.text_to_sequence(text_left + " " + aspect + " " + text_right)
-            context_indices = tokenizer.text_to_sequence(text_left + " " + text_right)
-            left_indices = tokenizer.text_to_sequence(text_left)
-            left_with_aspect_indices = tokenizer.text_to_sequence(text_left + " " + aspect)
-            right_indices = tokenizer.text_to_sequence(text_right, reverse=True)
-            right_with_aspect_indices = tokenizer.text_to_sequence(aspect + " " + text_right, reverse=True)
-            aspect_indices = tokenizer.text_to_sequence(aspect)
-            left_len = np.sum(left_indices != 0)
-            aspect_len = np.sum(aspect_indices != 0)
-            aspect_boundary = np.asarray([left_len, left_len + aspect_len - 1], dtype=np.int64)
-            polarity = int(polarity) + 1
-
-            text_len = np.sum(text_indices != 0)
-            concat_bert_indices = tokenizer.text_to_sequence('[CLS] ' + text_left + " " + aspect + " " + text_right + ' [SEP] ' + aspect + " [SEP]")
-            concat_segments_indices = [0] * (text_len + 2) + [1] * (aspect_len + 1)
-            concat_segments_indices = pad_and_truncate(concat_segments_indices, tokenizer.max_seq_len)
-
-            text_bert_indices = tokenizer.text_to_sequence("[CLS] " + text_left + " " + aspect + " " + text_right + " [SEP]")
-            aspect_bert_indices = tokenizer.text_to_sequence("[CLS] " + aspect + " [SEP]")
-
-            # dependency_graph = np.pad(idx2graph[i], \
-            #     ((0,tokenizer.max_seq_len-idx2graph[i].shape[0]),(0,tokenizer.max_seq_len-idx2graph[i].shape[0])), 'constant')
-
-            data = {
-                'concat_bert_indices': concat_bert_indices,
-                'concat_segments_indices': concat_segments_indices,
-                'text_bert_indices': text_bert_indices,
-                'aspect_bert_indices': aspect_bert_indices,
-                'text_indices': text_indices,
-                'context_indices': context_indices,
-                'left_indices': left_indices,
-                'left_with_aspect_indices': left_with_aspect_indices,
-                'right_indices': right_indices,
-                'right_with_aspect_indices': right_with_aspect_indices,
-                'aspect_indices': aspect_indices,
-                'aspect_boundary': aspect_boundary,
-                # 'dependency_graph': dependency_graph,
-                # 'dependency_graph': None,
-                'polarity': polarity,
-            }
-
-            all_data.append(data)
-        self.data = all_data
+    def __init__(self, data):
+        self.data = data
 
     def __getitem__(self, index):
         return self.data[index]
