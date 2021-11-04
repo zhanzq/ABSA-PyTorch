@@ -151,8 +151,15 @@ def main():
             test_sentence += "[UNK]"
             aspect = "[UNK]"
         t_probs = inf.evaluate(test_sentence, aspect)
-        print(t_probs.argmax(axis=-1) - 1)
-
+        label = t_probs.argmax(axis=-1)
+        confidence = t_probs[label]
+        if label == 0:
+            sentiment = "否定"
+        elif label == 1:
+            sentiment = "无观点"
+        else:
+            sentiment = "肯定"
+        print("(%s, %s, %s), confidence=%.4f" % (test_sentence, aspect, sentiment, confidence))
         prompt = "请输入用户语句:"
         print(prompt)
         test_sentence = input()
