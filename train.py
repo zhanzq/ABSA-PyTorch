@@ -8,12 +8,16 @@
 import os
 import sys
 import math
+from typing import Tuple
+
 import numpy
 import random
 import logging
 import argparse
 
 from sklearn import metrics
+from sklearn.metrics import confusion_matrix
+
 from transformers import BertModel
 from time import strftime, localtime
 
@@ -125,7 +129,7 @@ class Instructor:
                     logger.info("steps: %d, total avg loss: %.4f, batch_loss: %.4f, total avg acc: %.4f, \
                     batch_acc: %.4f" % (global_step, train_loss, batch_loss, train_acc, batch_acc))
 
-            val_acc, val_f1 = self._evaluate_acc_f1(val_data_loader)
+            val_acc, val_f1, _, _ = self._evaluate_acc_f1(val_data_loader)
             logger.info("> val_acc: {:.4f}, val_f1: {:.4f}".format(val_acc, val_f1))
             if val_acc > max_val_acc:
                 max_val_acc = val_acc
@@ -165,9 +169,10 @@ class Instructor:
                     t_outputs_all = torch.cat((t_outputs_all, t_outputs), dim=0)
 
         acc = n_correct / n_total
-        f1 = metrics.f1_score(t_targets_all.cpu(), torch.argmax(t_outputs_all, -1).cpu(),
-                              labels=[0, 1, 2], average="macro")
-        return acc, f1
+        gd_truths = t_targets_all.cpu()
+        preds = torch.argmax(t_outputs_all, -1).cpu()
+        f1 = metrics.f1_score(gd_truths, preds, labels=[0, 1, 2], average="macro")
+        return acc, f1, gd_truths, preds
 
     def run(self):
         # Loss and Optimizer
@@ -183,12 +188,53 @@ class Instructor:
         best_model_path = self._train(criterion, optimizer, train_data_loader, val_data_loader)
         self.model.load_state_dict(torch.load(best_model_path))
         print("load model from %s" % best_model_path)
-        train_acc, train_f1 = self._evaluate_acc_f1(train_data_loader)
-        val_acc, val_f1 = self._evaluate_acc_f1(val_data_loader)
-        test_acc, test_f1 = self._evaluate_acc_f1(test_data_loader)
+        train_acc, train_f1, _, _ = self._evaluate_acc_f1(train_data_loader)
+        val_acc, val_f1, _, _ = self._evaluate_acc_f1(val_data_loader)
+        test_acc, test_f1, _, _ = self._evaluate_acc_f1(test_data_loader)
         logger.info(">> train_acc: {:.4f}, train_f1: {:.4f}".format(train_acc, train_f1))
         logger.info(">> val_acc: {:.4f}, val_f1: {:.4f}".format(val_acc, val_f1))
         logger.info(">> test_acc: {:.4f}, test_f1: {:.4f}".format(test_acc, test_f1))
+
+    def result_analysis(self, data_loader, gd_truths, preds):
+        tokenizer = Tokenizer4Bert(self.opt.max_seq_len, self.opt.pretrained_bert_name)
+        sentences = []
+        for batch_data in data_loader:
+            text_indices = batch_data["text_indices"]
+            aspect_indices = batch_data["aspect_indices"]
+            for text_ids, aspect_ids in zip(text_indices, aspect_indices):
+                text_ids = [text_id for text_id in text_ids if text_id != 0]
+                aspect_ids = [aspect_id for aspect_id in aspect_ids if aspect_id != 0]
+                text = tokenizer.tokenizer.convert_ids_to_tokens(text_ids)
+                aspect = tokenizer.tokenizer.convert_ids_to_tokens(aspect_ids)
+                sentence = "".join(text)
+                aspect = "".join(aspect)
+                sentences.append((sentence, aspect))
+        conf_sentence_set = [[[] for _ in range(3)] for _ in range(3)]
+        for gd_idx, pred_idx, sentence in zip(gd_truths, preds, sentences):
+            gd_idx = gd_idx.item()
+            pred_idx = pred_idx.item()
+            if gd_idx == pred_idx:
+                continue
+            conf_sentence_set[gd_idx][pred_idx].append(sentence)
+
+        sentiment_lst = ["否定", "无观点", "肯定"]
+        with open("test_result_analysis.txt", "w") as writer:
+            cm = confusion_matrix(gd_truths, preds, labels=[0, 1, 2])
+            writer.write("test confusion matrix:\n")
+            writer.write("\t否定\t无观点\t肯定\n")
+            writer.write("否定\t%-4d\t%-4d\t%-4d\n" % (tuple(cm[0])))
+            writer.write("无观点\t%-4d\t%-4d\t%-4d\n" % (tuple(cm[1])))
+            writer.write("肯定\t%-4d\t%-4d\t%-4d\n\n" % (tuple(cm[2])))
+            for gd_idx in range(3):
+                for pred_idx in range(3):
+                    gd_senti = sentiment_lst[gd_idx]
+                    pred_senti = sentiment_lst[pred_idx]
+                    if len(conf_sentence_set[gd_idx][pred_idx]) == 0:
+                        continue
+                    writer.write("*" * 10 + " %s ==> %s " % (gd_senti, pred_senti) + "*" * 10 + "\n")
+                    for sentence in conf_sentence_set[gd_idx][pred_idx]:
+                        writer.write("%s\n" % str(sentence))
+                    writer.write("\n\n")
 
 
 def main():
