@@ -207,11 +207,11 @@ def load_data(data_dir, with_punctuation=False, tokenizer=None, do_shuffle=True,
         elif "valid" in file_name:
             with open(data_path, "r", encoding="utf-8", newline="\n", errors="ignore") as reader:
                 lines = reader.readlines()
-                train_lines.extend(lines)
+                valid_lines.extend(lines)
         elif "test" in file_name:
             with open(data_path, "r", encoding="utf-8", newline="\n", errors="ignore") as reader:
                 lines = reader.readlines()
-                train_lines.extend(lines)
+                test_lines.extend(lines)
         else:
             print("irrelevant data file: {:s}".format(data_path))
     train_sz = len(train_lines)
