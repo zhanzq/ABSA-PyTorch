@@ -131,18 +131,19 @@ batch_acc: %.4f" % (global_step, train_loss, batch_loss, train_acc, batch_acc))
             val_acc, val_f1, _, _ = self._evaluate_acc_f1(val_data_loader)
             logger.info("> val_acc: {:.4f}, val_f1: {:.4f}".format(val_acc, val_f1))
             if val_acc > max_val_acc:
-                max_val_acc = val_acc
-                max_val_epoch = i_epoch
                 if not os.path.exists("state_dict"):
                     os.mkdir("state_dict")
                 path = "state_dict/{0}_{1}_val_acc_{2}".format(self.opt.model_name, self.opt.dataset, round(val_acc, 4))
                 torch.save(self.model.state_dict(), path)
-                logger.info(">> saved: {}".format(path))
+                logger.info(">> saved better model: {}".format(path))
                 org_path = "state_dict/{0}_{1}_val_acc_{2}".format(self.opt.model_name, self.opt.dataset,
                                                                    round(max_val_acc, 4))
                 if os.path.exists(org_path):
                     os.remove(org_path)
-                    logger.info(">> remove older model {}".format(org_path))
+                    logger.info(">> remove older model: {}".format(org_path))
+
+                max_val_acc = val_acc
+                max_val_epoch = i_epoch
             if val_f1 > max_val_f1:
                 max_val_f1 = val_f1
             if i_epoch - max_val_epoch >= self.opt.patience:
