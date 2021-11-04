@@ -372,18 +372,20 @@ def main():
 
     ins = Instructor(opt)
     results = []
-    for i in range(5):
+    run_num = 5
+    for i in range(run_num):
         result_i = ins.run()
         results.append(result_i)
-    avg_result = numpy.mean(results, axis=0).tolist()
+    avg_result = numpy.mean(results, axis=0)
+    avg_result = [it.item() for it in avg_result]
 
     model_name = opt.pretrained_bert_name.split("/")[-1]
     with open("train.log", "a") as writer:
         writer.write("pretrained model: {:s}\n".format(model_name))
         writer.write("\t".join(["run_idx", "train_acc", "train_f1", "valid_acc", "valid_f1", "test_acc", "test_f1"])
                      + "\n")
-        for i in range(5):
-            writer.write("%d\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\n" % tuple(results[i]))
+        for i in range(run_num):
+            writer.write("%d\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\n" % tuple([i] + results[i]))
 
         writer.write("avg\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\n\n\n" % tuple(avg_result))
 
