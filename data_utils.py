@@ -128,7 +128,7 @@ class Tokenizer4Bert:
 
 
 def rm_punctuation(text):
-    punctuations = [",", "，", ".", "。", "?", "？", ":", "：", "!", "！", "'", "\"", "、"]
+    punctuations = [",", "，", "\.", "。", "\?", "？", ":", "：", "!", "！", "'", "\"", "、"]
     for pun in punctuations:
         text = re.sub(pun, "", text)
     return text
@@ -196,7 +196,7 @@ def get_dataset(lines, with_punctuation=False, tokenizer=None):
 
 def load_data(data_dir, with_punctuation=False, tokenizer=None, do_shuffle=True, splits=(0.7, 0.2, 0.1)):
     train_lines, valid_lines, test_lines = [], [], []
-    assert type(data_dir) is dir, "input path must be data dir"
+    assert os.path.isdir(data_dir), "input path must be data dir"
     files = os.listdir(data_dir)
     for file_name in files:
         data_path = os.path.join(data_dir, file_name)
