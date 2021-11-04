@@ -127,7 +127,7 @@ class Instructor:
                     train_acc = n_correct / n_total
                     train_loss = loss_total / n_total
                     logger.info("steps: %d, total avg loss: %.4f, batch_loss: %.4f, total avg acc: %.4f, \
-                    batch_acc: %.4f" % (global_step, train_loss, batch_loss, train_acc, batch_acc))
+batch_acc: %.4f" % (global_step, train_loss, batch_loss, train_acc, batch_acc))
 
             val_acc, val_f1, _, _ = self._evaluate_acc_f1(val_data_loader)
             logger.info("> val_acc: {:.4f}, val_f1: {:.4f}".format(val_acc, val_f1))
