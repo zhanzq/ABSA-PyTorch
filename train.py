@@ -8,7 +8,6 @@
 import os
 import sys
 import math
-from typing import Tuple
 
 import numpy
 import random
@@ -139,6 +138,11 @@ batch_acc: %.4f" % (global_step, train_loss, batch_loss, train_acc, batch_acc))
                 path = "state_dict/{0}_{1}_val_acc_{2}".format(self.opt.model_name, self.opt.dataset, round(val_acc, 4))
                 torch.save(self.model.state_dict(), path)
                 logger.info(">> saved: {}".format(path))
+                org_path = "state_dict/{0}_{1}_val_acc_{2}".format(self.opt.model_name, self.opt.dataset,
+                                                                   round(max_val_acc, 4))
+                if os.path.exists(org_path):
+                    os.remove(org_path)
+                    logger.info(">> remove older model {}".format(org_path))
             if val_f1 > max_val_f1:
                 max_val_f1 = val_f1
             if i_epoch - max_val_epoch >= self.opt.patience:
@@ -174,7 +178,7 @@ batch_acc: %.4f" % (global_step, train_loss, batch_loss, train_acc, batch_acc))
         f1 = metrics.f1_score(gd_truths, preds, labels=[0, 1, 2], average="macro")
         return acc, f1, gd_truths, preds
 
-    def run(self):
+    def run(self,):
         # Loss and Optimizer
         criterion = nn.CrossEntropyLoss()
         _params = filter(lambda p: p.requires_grad, self.model.parameters())
@@ -194,6 +198,8 @@ batch_acc: %.4f" % (global_step, train_loss, batch_loss, train_acc, batch_acc))
         logger.info(">> train_acc: {:.4f}, train_f1: {:.4f}".format(train_acc, train_f1))
         logger.info(">> val_acc: {:.4f}, val_f1: {:.4f}".format(val_acc, val_f1))
         logger.info(">> test_acc: {:.4f}, test_f1: {:.4f}".format(test_acc, test_f1))
+
+        return [train_acc, train_f1, val_acc, val_f1, test_acc, test_f1]
 
     def result_analysis(self, data_loader, gd_truths, preds):
         tokenizer = Tokenizer4Bert(self.opt.max_seq_len, self.opt.pretrained_bert_name)
@@ -364,7 +370,21 @@ def main():
     logger.addHandler(logging.FileHandler(log_file))
 
     ins = Instructor(opt)
-    ins.run()
+    results = []
+    for i in range(5):
+        result_i = ins.run()
+        results.append(result_i)
+    avg_result = numpy.mean(results, axis=0).tolist()
+
+    model_name = opt.pretrained_bert_name.split("/")[-1]
+    with open("train.log", "a") as writer:
+        writer.write("pretrained model: {:s}\n".format(model_name))
+        writer.write("\t".join(["run_idx", "train_acc", "train_f1", "valid_acc", "valid_f1", "test_acc", "test_f1"])
+                     + "\n")
+        for i in range(5):
+            writer.write("%d\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\n" % tuple(results[i]))
+
+        writer.write("avg\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\n\n\n" % tuple(avg_result))
 
 
 if __name__ == "__main__":
