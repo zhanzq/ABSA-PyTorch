@@ -102,7 +102,7 @@ class Instructor:
                             stdev = 1. / math.sqrt(p.shape[0])
                             torch.nn.init.uniform_(p, a=-stdev, b=stdev)
 
-    def _train(self, criterion, optimizer, train_data_loader, val_data_loader):
+    def _train(self, criterion, optimizer, train_data_loader, val_data_loader, model_name="None", tag=0):
         path = None
         max_val_f1 = 0
         max_val_acc = 0
@@ -145,12 +145,12 @@ batch_acc: %.4f" % (global_step, train_loss, batch_loss, train_acc, batch_acc))
             if val_acc > max_val_acc:
                 if not os.path.exists("state_dict"):
                     os.mkdir("state_dict")
-                path = "state_dict/{0}_{1}_val_acc_{2}_{3}_{4}".format(self.opt.model_name, 
-                        self.opt.dataset, round(val_acc, 4), model_name, tag)
+                path = "state_dict/{0}_{1}_val_acc_{2}_{3}_{4}".format(
+                    self.opt.model_name, self.opt.dataset, round(val_acc, 4), model_name, tag)
                 torch.save(self.model.state_dict(), path)
                 logger.info(">> saved better model: {}".format(path))
-                org_path = "state_dict/{0}_{1}_val_acc_{2}_{3}_{4}".format(self.opt.model_name, 
-                        self.opt.dataset, round(max_val_acc, 4), model_name, tag)
+                org_path = "state_dict/{0}_{1}_val_acc_{2}_{3}_{4}".format(
+                    self.opt.model_name, self.opt.dataset, round(max_val_acc, 4), model_name, tag)
                 if os.path.exists(org_path):
                     os.remove(org_path)
                     logger.info(">> remove older model: {}".format(org_path))
@@ -203,7 +203,7 @@ batch_acc: %.4f" % (global_step, train_loss, batch_loss, train_acc, batch_acc))
         val_data_loader = DataLoader(dataset=self.valid_dataset, batch_size=self.opt.batch_size, shuffle=False)
 
         self._reset_params()
-        best_model_path = self._train(criterion, optimizer, train_data_loader, val_data_loader)
+        best_model_path = self._train(criterion, optimizer, train_data_loader, val_data_loader, model_name, tag)
         self.model.load_state_dict(torch.load(best_model_path))
         print("load model from %s" % best_model_path)
         train_acc, train_f1, _, _ = self._evaluate_acc_f1(train_data_loader)
@@ -395,7 +395,8 @@ def main():
         avg_result = [it.item() for it in avg_result]
         # write logs
         writer.write("pretrained model: {:s}, model architecture: {:s}\n".format(model_name, opt.model_name))
-        writer.write("{:8s}{:8s}{:8s}{:8s}{:8s}{:8s}{:8s}\n".format("run_idx", "train_acc", "train_f1", "valid_acc", "valid_f1", "test_acc", "test_f1"))
+        writer.write("{:8s}{:8s}{:8s}{:8s}{:8s}{:8s}{:8s}\n".format("run_idx", "train_acc", "train_f1", "valid_acc",
+                                                                    "valid_f1", "test_acc", "test_f1"))
         for i in range(run_num):
             writer.write("%8d%3.4f%3.4f%3.4f%3.4f%3.4f%3.4f\n" % tuple([i] + results[i]))
         writer.write("%8s%3.4f%3.4f%3.4f%3.4f%3.4f%3.4f\n\n\n" % tuple(["avg"] + avg_result))
