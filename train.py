@@ -42,7 +42,19 @@ class Instructor:
 
         if "bert" in opt.model_name:
             tokenizer = Tokenizer4Bert(opt.max_seq_len, opt.pretrained_bert_name)
-            bert = BertModel.from_pretrained(opt.pretrained_bert_name)
+            if "electra" in opt.pretrained_bert_name:
+                dct = torch.load(os.path.join(opt.pretrained_bert_name, "pytorch_model.bin"))
+                state_dict = {}
+                for key in dct:
+                    if key.startswith("electra."):
+                        state_dict[key[8:]] = dct[key]
+                    elif key.startswith("discriminator_predictions."):
+                        prefix_len = len("discriminator_predictions.")
+                        _key = "pooler." + key[prefix_len:]
+                        state_dict[_key] = dct[key]
+                        bert = BertModel.from_pretrained(opt.pretrained_bert_name, state_dict=state_dict)
+            else:
+                bert = BertModel.from_pretrained(opt.pretrained_bert_name)
             self.model = opt.model_class(bert, opt).to(opt.device)
         else:
             tokenizer = build_tokenizer(
@@ -370,10 +382,10 @@ def main():
     log_file = "{}-{}-{}.log".format(opt.model_name, opt.dataset, strftime("%y%m%d-%H%M", localtime()))
     logger.addHandler(logging.FileHandler(log_file))
 
-    ins = Instructor(opt)
     results = []
     run_num = 5
     for i in range(run_num):
+        ins = Instructor(opt)
         result_i = ins.run()
         results.append(result_i)
     avg_result = numpy.mean(results, axis=0)
