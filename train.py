@@ -52,7 +52,7 @@ class Instructor:
                         prefix_len = len("discriminator_predictions.")
                         _key = "pooler." + key[prefix_len:]
                         state_dict[_key] = dct[key]
-                        bert = BertModel.from_pretrained(opt.pretrained_bert_name, state_dict=state_dict)
+                bert = BertModel.from_pretrained(opt.pretrained_bert_name, state_dict=state_dict)
             else:
                 bert = BertModel.from_pretrained(opt.pretrained_bert_name)
             self.model = opt.model_class(bert, opt).to(opt.device)
