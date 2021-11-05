@@ -1,16 +1,15 @@
-# -*- coding: utf-8 -*-
-# file: lcf_bert.py
-# author: yangheng <yangheng@m.scnu.edu.cn>
-# Copyright (C) 2019. All Rights Reserved.
-
+# !/usr/bin/env python
+# encoding=utf-8
+# author: zhanzq
+# email : zhanzhiqiang09@126.com 
+# date  : 2021/11/5
+#
 
 # The code is based on repository: https://github.com/yangheng95/LCF-ABSA
-
-
-import torch
-import torch.nn as nn
 import copy
+import torch
 import numpy as np
+import torch.nn as nn
 
 from transformers.modeling_bert import BertPooler, BertSelfAttention
 
@@ -29,14 +28,18 @@ class SelfAttention(nn.Module):
         SA_out = self.SA(inputs, zero_tensor)
         return self.tanh(SA_out[0])
 
+
 class LCF_BERT(nn.Module):
     def __init__(self, bert, opt):
         super(LCF_BERT, self).__init__()
 
         self.bert_spc = bert
         self.opt = opt
-        # self.bert_local = copy.deepcopy(bert)  # Uncomment the line to use dual Bert
-        self.bert_local = bert   # Default to use single Bert and reduce memory requirements
+        opt.dual_model = False
+        if opt.dual_model:
+            self.bert_local = copy.deepcopy(bert)  # Uncomment the line to use dual Bert
+        else:
+            self.bert_local = bert   # Default to use single Bert and reduce memory requirements
         self.dropout = nn.Dropout(opt.dropout)
         self.bert_SA = SelfAttention(bert.config, opt)
         self.linear_double = nn.Linear(opt.bert_dim * 2, opt.bert_dim)
@@ -54,16 +57,17 @@ class LCF_BERT(nn.Module):
             asp_len = np.count_nonzero(asps[asp_i]) - 2
             try:
                 asp_begin = np.argwhere(texts[text_i] == asps[asp_i][1])[0][0]
-            except:
+            except Exception as e:
+                print(e)
                 continue
             if asp_begin >= mask_len:
                 mask_begin = asp_begin - mask_len
             else:
                 mask_begin = 0
             for i in range(mask_begin):
-                masked_text_raw_indices[text_i][i] = np.zeros((self.opt.bert_dim), dtype=np.float)
+                masked_text_raw_indices[text_i][i] = np.zeros(self.opt.bert_dim, dtype=np.float)
             for j in range(asp_begin + asp_len + mask_len, self.opt.max_seq_len):
-                masked_text_raw_indices[text_i][j] = np.zeros((self.opt.bert_dim), dtype=np.float)
+                masked_text_raw_indices[text_i][j] = np.zeros(self.opt.bert_dim, dtype=np.float)
         masked_text_raw_indices = torch.from_numpy(masked_text_raw_indices)
         return masked_text_raw_indices.to(self.opt.device)
 
@@ -77,7 +81,8 @@ class LCF_BERT(nn.Module):
             try:
                 asp_begin = np.argwhere(texts[text_i] == asps[asp_i][1])[0][0]
                 asp_avg_index = (asp_begin * 2 + asp_len) / 2
-            except:
+            except Exception as e:
+                print(e)
                 continue
             distances = np.zeros(np.count_nonzero(texts[text_i]), dtype=np.float32)
             for i in range(1, np.count_nonzero(texts[text_i])-1):
