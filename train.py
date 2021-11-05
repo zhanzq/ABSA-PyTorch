@@ -145,11 +145,12 @@ batch_acc: %.4f" % (global_step, train_loss, batch_loss, train_acc, batch_acc))
             if val_acc > max_val_acc:
                 if not os.path.exists("state_dict"):
                     os.mkdir("state_dict")
-                path = "state_dict/{0}_{1}_val_acc_{2}".format(self.opt.model_name, self.opt.dataset, round(val_acc, 4))
+                path = "state_dict/{0}_{1}_val_acc_{2}_{3}_{4}".format(self.opt.model_name, 
+                        self.opt.dataset, round(val_acc, 4), model_name, tag)
                 torch.save(self.model.state_dict(), path)
                 logger.info(">> saved better model: {}".format(path))
-                org_path = "state_dict/{0}_{1}_val_acc_{2}".format(self.opt.model_name, self.opt.dataset,
-                                                                   round(max_val_acc, 4))
+                org_path = "state_dict/{0}_{1}_val_acc_{2}_{3}_{4}".format(self.opt.model_name, 
+                        self.opt.dataset, round(max_val_acc, 4), model_name, tag)
                 if os.path.exists(org_path):
                     os.remove(org_path)
                     logger.info(">> remove older model: {}".format(org_path))
@@ -191,7 +192,7 @@ batch_acc: %.4f" % (global_step, train_loss, batch_loss, train_acc, batch_acc))
         f1 = metrics.f1_score(gd_truths, preds, labels=[0, 1, 2], average="macro")
         return acc, f1, gd_truths, preds
 
-    def run(self,):
+    def run(self, model_name="chinese-bert-base", tag=0):
         # Loss and Optimizer
         criterion = nn.CrossEntropyLoss()
         _params = filter(lambda p: p.requires_grad, self.model.parameters())
@@ -384,22 +385,20 @@ def main():
 
     results = []
     run_num = 5
-    for i in range(run_num):
-        ins = Instructor(opt)
-        result_i = ins.run()
-        results.append(result_i)
-    avg_result = numpy.mean(results, axis=0)
-    avg_result = [it.item() for it in avg_result]
-
     model_name = opt.pretrained_bert_name.split("/")[-1]
     with open("train.log", "a") as writer:
-        writer.write("pretrained model: {:s}\n".format(model_name))
-        writer.write("\t".join(["run_idx", "train_acc", "train_f1", "valid_acc", "valid_f1", "test_acc", "test_f1"])
-                     + "\n")
         for i in range(run_num):
-            writer.write("%d\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\n" % tuple([i] + results[i]))
-
-        writer.write("avg\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\t%.4f\n\n\n" % tuple(avg_result))
+            ins = Instructor(opt)
+            result_i = ins.run(model_name=model_name, tag=i)
+            results.append(result_i)
+        avg_result = numpy.mean(results, axis=0)
+        avg_result = [it.item() for it in avg_result]
+        # write logs
+        writer.write("pretrained model: {:s}, model architecture: {:s}\n".format(model_name, opt.model_name))
+        writer.write("{:8s}{:8s}{:8s}{:8s}{:8s}{:8s}{:8s}\n".format("run_idx", "train_acc", "train_f1", "valid_acc", "valid_f1", "test_acc", "test_f1"))
+        for i in range(run_num):
+            writer.write("%8d%3.4f%3.4f%3.4f%3.4f%3.4f%3.4f\n" % tuple([i] + results[i]))
+        writer.write("%8s%3.4f%3.4f%3.4f%3.4f%3.4f%3.4f\n\n\n" % tuple(["avg"] + avg_result))
 
 
 if __name__ == "__main__":
