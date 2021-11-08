@@ -395,11 +395,12 @@ def main():
         avg_result = [it.item() for it in avg_result]
         # write logs
         writer.write("pretrained model: {:s}, model architecture: {:s}\n".format(model_name, opt.model_name))
-        writer.write("{:8s}{:8s}{:8s}{:8s}{:8s}{:8s}{:8s}\n".format("run_idx", "train_acc", "train_f1", "valid_acc",
-                                                                    "valid_f1", "test_acc", "test_f1"))
+        writer.write("{:10s}{:10s}{:10s}{:10s}{:10s}{:10s}{:10s}\n".format("run_idx", "train_acc", "train_f1",
+                                                                           "valid_acc", "valid_f1",
+                                                                           "test_acc", "test_f1"))
         for i in range(run_num):
-            writer.write("%8d%3.4f%3.4f%3.4f%3.4f%3.4f%3.4f\n" % tuple([i] + results[i]))
-        writer.write("%8s%3.4f%3.4f%3.4f%3.4f%3.4f%3.4f\n\n\n" % tuple(["avg"] + avg_result))
+            writer.write("%-10d%-10.4f%-10.4f%-10.4f%-10.4f%-10.4f%-10.4f\n" % tuple([i] + results[i]))
+        writer.write("%-10s%-10.4f%-10.4f%-10.4f%-10.4f%-10.4f%-10.4f\n\n\n" % tuple(["avg"] + avg_result))
 
 
 if __name__ == "__main__":
