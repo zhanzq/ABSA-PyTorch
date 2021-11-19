@@ -47,11 +47,11 @@ class LCF_BERT(nn.Module):
         self.bert_pooler = BertPooler(bert.config)
         self.dense = nn.Linear(opt.bert_dim, opt.polarities_dim)
 
-    def feature_dynamic_mask(self, text_local_indices, aspect_indices):
-        texts = text_local_indices.cpu().numpy()
-        asps = aspect_indices.cpu().numpy()
+    def feature_dynamic_mask(self, text_bert_indices, aspect_bert_indices):
+        texts = text_bert_indices.cpu().numpy()
+        asps = aspect_bert_indices.cpu().numpy()
         mask_len = self.opt.SRD
-        masked_text_raw_indices = np.ones((text_local_indices.size(0), self.opt.max_seq_len, self.opt.bert_dim),
+        masked_text_raw_indices = np.ones((text_bert_indices.size(0), self.opt.max_seq_len, self.opt.bert_dim),
                                           dtype=np.float32)
         for text_i, asp_i in zip(range(len(texts)), range(len(asps))):
             asp_len = np.count_nonzero(asps[asp_i]) - 2
@@ -71,10 +71,10 @@ class LCF_BERT(nn.Module):
         masked_text_raw_indices = torch.from_numpy(masked_text_raw_indices)
         return masked_text_raw_indices.to(self.opt.device)
 
-    def feature_dynamic_weighted(self, text_local_indices, aspect_indices):
-        texts = text_local_indices.cpu().numpy()
-        asps = aspect_indices.cpu().numpy()
-        masked_text_raw_indices = np.ones((text_local_indices.size(0), self.opt.max_seq_len, self.opt.bert_dim),
+    def feature_dynamic_weighted(self, text_bert_indices, aspect_bert_indices):
+        texts = text_bert_indices.cpu().numpy()
+        asps = aspect_bert_indices.cpu().numpy()
+        masked_text_raw_indices = np.ones((text_bert_indices.size(0), self.opt.max_seq_len, self.opt.bert_dim),
                                           dtype=np.float32)
         for text_i, asp_i in zip(range(len(texts)), range(len(asps))):
             asp_len = np.count_nonzero(asps[asp_i]) - 2
@@ -97,23 +97,23 @@ class LCF_BERT(nn.Module):
         return masked_text_raw_indices.to(self.opt.device)
 
     def forward(self, inputs):
-        text_bert_indices = inputs[0]
-        bert_segments_ids = inputs[1]
-        text_local_indices = inputs[2]
-        aspect_indices = inputs[3]
+        concat_bert_indices = inputs[0]
+        concat_segments_indices = inputs[1]
+        text_bert_indices = inputs[2]
+        aspect_bert_indices = inputs[3]
 
-        bert_spc_out, _ = self.bert_spc(text_bert_indices, token_type_ids=bert_segments_ids)
+        bert_spc_out, _ = self.bert_spc(concat_bert_indices, token_type_ids=concat_segments_indices)
         bert_spc_out = self.dropout(bert_spc_out)
 
-        bert_local_out, _ = self.bert_local(text_local_indices)
+        bert_local_out, _ = self.bert_local(text_bert_indices)
         bert_local_out = self.dropout(bert_local_out)
 
         if self.opt.local_context_focus == 'cdm':
-            masked_local_text_vec = self.feature_dynamic_mask(text_local_indices, aspect_indices)
+            masked_local_text_vec = self.feature_dynamic_mask(text_bert_indices, aspect_bert_indices)
             bert_local_out = torch.mul(bert_local_out, masked_local_text_vec)
 
         elif self.opt.local_context_focus == 'cdw':
-            weighted_text_local_features = self.feature_dynamic_weighted(text_local_indices, aspect_indices)
+            weighted_text_local_features = self.feature_dynamic_weighted(text_bert_indices, aspect_bert_indices)
             bert_local_out = torch.mul(bert_local_out, weighted_text_local_features)
 
         out_cat = torch.cat((bert_local_out, bert_spc_out), dim=-1)
