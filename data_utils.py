@@ -140,9 +140,11 @@ def get_example(utt, aspect, polar=None, with_punctuation=False, tokenizer=None)
         polarity = int(polar) + 1
     if not with_punctuation:
         utt = rm_punctuation(text=utt)
-
     text_left, _, text_right = [s.strip() for s in utt.partition(aspect)]
 
+    # if aspect != "[UNK]":
+    #     utt = text_left + "[unused1]" + text_right
+    #     aspect = "[unused1]"
     text_indices = tokenizer.text_to_sequence(utt)
     aspect_indices = tokenizer.text_to_sequence(aspect)
     left_indices = tokenizer.text_to_sequence(text_left)
