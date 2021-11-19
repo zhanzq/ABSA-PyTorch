@@ -36,7 +36,10 @@ class Inference:
                 embedding_file='{0}_{1}_embedding_matrix.dat'.format(str(opt.embed_dim), opt.dataset))
             self.model = opt.model_class(embedding_matrix, opt)
         print('loading model {0} from {1}'.format(opt.model_name, opt.state_dict_path))
-        self.model.load_state_dict(torch.load(opt.state_dict_path))
+        if torch.cuda.is_available():
+            self.model.load_state_dict(torch.load(opt.state_dict_path))
+        else:
+            self.model.load_state_dict(torch.load(opt.state_dict_path, map_location=torch.device('cpu')))
         self.model = self.model.to(opt.device)
         # switch model to evaluation mode
         self.model.eval()
