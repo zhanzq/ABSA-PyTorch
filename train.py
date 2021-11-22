@@ -107,8 +107,10 @@ class Instructor:
                             torch.nn.init.uniform_(p, a=-stdev, b=stdev)
 
     def train(self,):
-        train_data_loader = DataLoader(dataset=self.train_dataset, batch_size=self.opt.batch_size, shuffle=True)
-        valid_data_loader = DataLoader(dataset=self.valid_dataset, batch_size=self.opt.eval_batch_size, shuffle=False)
+        train_data_loader = DataLoader(dataset=self.train_dataset, num_workers=8,
+                                       batch_size=self.opt.batch_size, shuffle=True)
+        valid_data_loader = DataLoader(dataset=self.valid_dataset, num_workers=8,
+                                       batch_size=self.opt.eval_batch_size, shuffle=False)
 
         self._reset_params()
         self.global_step, self.n_correct, self.n_total, self.loss_total = 0, 0, 0, 0
@@ -265,10 +267,9 @@ class Instructor:
         # Loss and Optimizer
         bert = BertModel.from_pretrained(self.opt.pretrained_bert_name)
         self.model = self.opt.model_class(bert, self.opt).to(self.opt.device)
-        for i in range(run_num):
-            self.run_tag = str(i)
         results = []
         for i in range(run_num):
+            self.run_tag = str(i)
             self.train()
             eval_res = self.evaluate()
             result_i = [eval_res["train_acc"], eval_res["train_f1"], eval_res["valid_acc"],
