@@ -263,7 +263,8 @@ class Instructor:
 
     def run(self, run_num=5):
         # Loss and Optimizer
-        self.model = BertModel.from_pretrained(self.opt.pretrained_bert_name)
+        bert = BertModel.from_pretrained(self.opt.pretrained_bert_name)
+        self.model = self.opt.model_class(bert, self.opt).to(self.opt.device)
         for i in range(run_num):
             self.run_tag = str(i)
         results = []
