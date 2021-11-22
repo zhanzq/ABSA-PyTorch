@@ -10,21 +10,26 @@ import sys
 import math
 
 import numpy
+import random
 import logging
+import argparse
 
 from sklearn import metrics
-from time import strftime, localtime
 from sklearn.metrics import confusion_matrix
 
 from transformers import BertModel
+from time import strftime, localtime
 
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 
-from config import option
 from data_utils import load_data
 from data_utils import build_tokenizer, build_embedding_matrix, Tokenizer4Bert, ABSADataset
+
+from models.aen import AEN_BERT
+from models.bert_spc import BERT_SPC
+from models import LSTM, IAN, MemNet, RAM, TD_LSTM, TC_LSTM, Cabasc, ATAE_LSTM, TNet_LF, AOA, MGAN, ASGCN, LCF_BERT
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -32,14 +37,8 @@ logger.addHandler(logging.StreamHandler(sys.stdout))
 
 
 class Instructor:
-
     def __init__(self, opt):
         self.opt = opt
-        self.early_stop = False
-        self.criterion = nn.CrossEntropyLoss()
-        self.n_total, self.global_step, self.n_correct, self.max_valid_epoch = 0, 0, 0, 0
-        self.max_valid_acc, self.max_valid_f1, self.valid_acc, self.valid_f1, self.loss_total = 0.0, 0.0, 0.0, 0.0, 0.0
-        self.model_name, self.run_tag = "", ""
 
         if "bert" in opt.model_name:
             tokenizer = Tokenizer4Bert(opt.max_seq_len, opt.pretrained_bert_name)
@@ -68,11 +67,8 @@ class Instructor:
                 embedding_file="{0}_{1}_embedding_matrix.dat".format(str(opt.embed_dim), opt.dataset))
             self.model = opt.model_class(embedding_matrix, opt).to(opt.device)
 
-        _params = filter(lambda p: p.requires_grad, self.model.parameters())
-        self.optimizer = self.opt.optimizer(_params, lr=self.opt.lr, weight_decay=self.opt.l2reg)
-
-        train_data, valid_data, test_data = load_data(data_dir=opt.data_dir,
-                                                      with_punctuation=False, tokenizer=tokenizer)
+        data_dir = opt.data_dir
+        train_data, valid_data, test_data = load_data(data_dir=data_dir, with_punctuation=False, tokenizer=tokenizer)
 
         self.train_dataset = ABSADataset(train_data)
         self.valid_dataset = ABSADataset(valid_data)
@@ -80,9 +76,9 @@ class Instructor:
 
         if opt.device.type == "cuda":
             logger.info("cuda memory allocated: {}".format(torch.cuda.memory_allocated(device=opt.device.index)))
-        self.print_args()
+        self._print_args()
 
-    def print_args(self):
+    def _print_args(self):
         n_trainable_params, n_untrainable_params = 0, 0
         for p in self.model.parameters():
             n_params = torch.prod(torch.tensor(p.shape))
@@ -106,177 +102,118 @@ class Instructor:
                             stdev = 1. / math.sqrt(p.shape[0])
                             torch.nn.init.uniform_(p, a=-stdev, b=stdev)
 
-    def train(self,):
-        train_data_loader = DataLoader(dataset=self.train_dataset, num_workers=8,
-                                       batch_size=self.opt.batch_size, shuffle=True)
-        valid_data_loader = DataLoader(dataset=self.valid_dataset, num_workers=8,
-                                       batch_size=self.opt.eval_batch_size, shuffle=False)
-
-        self._reset_params()
-        self.global_step, self.n_correct, self.n_total, self.loss_total = 0, 0, 0, 0
-
+    def _train(self, criterion, optimizer, train_data_loader, val_data_loader):
+        path = None
+        max_val_f1 = 0
+        max_val_acc = 0
+        global_step = 0
+        max_val_epoch = 0
         for i_epoch in range(self.opt.num_epoch):
-            logger.info("*" * 40 + "epoch: {:-2d}".format(i_epoch) + "*" * 40)
-
+            logger.info(">" * 100)
+            logger.info("epoch: {}".format(i_epoch))
+            n_correct, n_total, loss_total = 0, 0, 0
+            # switch model to training mode
+            self.model.train()
             for i_batch, batch in enumerate(train_data_loader):
-                # switch model to training mode
-                self.model.train()
-                self.global_step += 1
+                global_step += 1
+                # clear gradient accumulators
+                optimizer.zero_grad()
+
                 inputs = [batch[col].to(self.opt.device) for col in self.opt.inputs_cols]
+                outputs = self.model(inputs)
                 targets = batch["polarity"].to(self.opt.device)
-                batch_correct, batch_loss = self.train_step(inputs, targets)
-                batch_size = len(targets)
 
-                if self.global_step % self.opt.log_step == 0:
-                    self.do_log_step(batch_correct, batch_loss, batch_size, valid_data_loader)
-                    self.update_model(cur_epoch=i_epoch)
+                loss = criterion(outputs, targets)
+                loss.backward()
+                optimizer.step()
 
-                if self.early_stop:
-                    break
+                batch_sz = len(outputs)
+                batch_correct = (torch.argmax(outputs, -1) == targets).sum().item()
+                batch_acc = 1.0*batch_correct/batch_sz
+                n_correct += batch_correct
+                n_total += batch_sz
+                batch_loss = loss.item()
+                loss_total += batch_loss * batch_sz
+                if global_step % self.opt.log_step == 0:
+                    train_acc = n_correct / n_total
+                    train_loss = loss_total / n_total
+                    logger.info("steps: %d, total avg loss: %.4f, batch_loss: %.4f, total avg acc: %.4f, \
+batch_acc: %.4f" % (global_step, train_loss, batch_loss, train_acc, batch_acc))
 
-    def do_log_step(self, batch_correct, batch_loss, batch_size, valid_data_loader=None):
-        self.n_total += batch_size
-        self.loss_total += batch_loss * batch_size
-        self.n_correct += batch_correct
-        avg_loss = self.loss_total / self.n_total
-        avg_acc = 1.0 * self.n_correct / self.n_total
-        batch_acc = 1.0 * batch_correct/batch_size
+            val_acc, val_f1, _, _ = self._evaluate_acc_f1(val_data_loader)
+            logger.info("> val_acc: {:.4f}, val_f1: {:.4f}".format(val_acc, val_f1))
+            if val_acc > max_val_acc:
+                if not os.path.exists("state_dict"):
+                    os.mkdir("state_dict")
+                path = "state_dict/{0}_{1}_val_acc_{2}_{3}_{4}".format(self.opt.model_name, 
+                        self.opt.dataset, round(val_acc, 4), model_name, tag)
+                torch.save(self.model.state_dict(), path)
+                logger.info(">> saved better model: {}".format(path))
+                org_path = "state_dict/{0}_{1}_val_acc_{2}_{3}_{4}".format(self.opt.model_name, 
+                        self.opt.dataset, round(max_val_acc, 4), model_name, tag)
+                if os.path.exists(org_path):
+                    os.remove(org_path)
+                    logger.info(">> remove older model: {}".format(org_path))
 
-        logger.info("steps: %d, total avg loss: %.4f, batch_loss: %.4f, total avg acc: %.4f, batch_acc: %.4f"
-                    % (self.global_step, avg_loss, batch_loss, avg_acc, batch_acc))
+                max_val_acc = val_acc
+                max_val_epoch = i_epoch
+            if val_f1 > max_val_f1:
+                max_val_f1 = val_f1
+            if i_epoch - max_val_epoch >= self.opt.patience:
+                print(">> early stop.")
+                break
 
-        if valid_data_loader is not None:
-            valid_res = self.evaluate_acc_f1(valid_data_loader)
-            self.valid_acc, self.valid_f1 = valid_res["acc"], valid_res["f1"]
-            logger.info("> valid_acc: {:.4f}, valid_f1: {:.4f}".format(self.valid_acc, self.valid_f1))
+        return path
 
-    def train_step(self, inputs, targets):
-        self.global_step += 1
-
-        # clear gradient accumulators
-        self.optimizer.zero_grad()
-        outputs = self.model(inputs)
-
-        loss = self.criterion(outputs, targets)
-        loss.backward()
-        self.optimizer.step()
-
-        batch_correct = (torch.argmax(outputs, -1) == targets).sum().item()
-        batch_loss = loss.item()
-
-        return batch_correct, batch_loss
-
-    def update_model(self, cur_epoch):
-        if self.valid_acc <= self.max_valid_acc:
-            return
-
-        # save new better model
-        if not os.path.exists("state_dict"):
-            os.mkdir("state_dict")
-        save_path = "state_dict/{0}_{1}_{2}.pt".format(self.opt.model_name, self.model_name, self.run_tag)
-        torch.save(self.model.state_dict(), save_path)
-        logger.info(">> saved better model: {}".format(save_path))
-
-        org_path = "state_dict/{0}_{1}_{2}.pt".format(self.opt.model_name, self.model_name, self.run_tag)
-        if os.path.exists(org_path):
-            os.remove(org_path)
-            logger.info(">> remove older model: {}".format(org_path))
-
-        self.max_valid_acc = self.valid_acc
-        self.max_valid_epoch = cur_epoch
-        if self.valid_f1 > self.max_valid_f1:
-            self.max_valid_f1 = self.valid_f1
-        if cur_epoch - self.max_valid_epoch >= self.opt.patience:
-            logger.info(">> early stop.")
-            self.early_stop = True
-
-    def evaluate(self):
-        # load model
-        assert os.path.exists(self.opt.best_model_path), "pretrained model must exist for evaluation"
-        self.model.load_state_dict(torch.load(self.opt.best_model_path, map_location=self.opt.device))
-        print("load model from %s" % self.opt.best_model_path)
-
-        # construct data loader
-        train_data_loader = DataLoader(dataset=self.train_dataset, batch_size=self.opt.eval_batch_size, shuffle=False)
-        test_data_loader = DataLoader(dataset=self.test_dataset, batch_size=self.opt.eval_batch_size, shuffle=False)
-        valid_data_loader = DataLoader(dataset=self.valid_dataset, batch_size=self.opt.eval_batch_size, shuffle=False)
-
-        # calculate accuracy and f1
-        train_acc, train_f1, _, _ = self.evaluate_acc_f1(train_data_loader)
-        valid_acc, valid_f1, _, _ = self.evaluate_acc_f1(valid_data_loader)
-        test_acc, test_f1, _, _ = self.evaluate_acc_f1(test_data_loader)
-        logger.info(">> train_acc: {:.4f}, train_f1: {:.4f}".format(train_acc, train_f1))
-        logger.info(">> valid_acc: {:.4f}, valid_f1: {:.4f}".format(valid_acc, valid_f1))
-        logger.info(">> test_acc: {:.4f}, test_f1: {:.4f}".format(test_acc, test_f1))
-
-        eval_res = {
-            "train_acc": train_acc,
-            "train_f1": train_f1,
-            "valid_acc": valid_acc,
-            "valid_f1": valid_f1,
-            "test_acc": test_acc,
-            "test_f1": test_f1,
-        }
-
-        return eval_res
-
-    def test(self):
-        # load model
-        self.model.load_state_dict(torch.load(self.opt.best_model_path))
-        print("load model from %s" % self.opt.best_model_path)
-
-        # construct data loader
-        test_data_loader = DataLoader(dataset=self.test_dataset, batch_size=self.opt.eval_batch_size, shuffle=False)
-
-        # calculate accuracy and f1
-        test_acc, test_f1, gd_truths, preds = self.evaluate_acc_f1(test_data_loader)
-        logger.info(">> test_acc: {:.4f}, test_f1: {:.4f}".format(test_acc, test_f1))
-
-    def evaluate_acc_f1(self, data_loader):
+    def _evaluate_acc_f1(self, data_loader):
         n_correct, n_total = 0, 0
-        gd_truths, preds = [], []
-
+        t_targets_all, t_outputs_all = None, None
         # switch model to evaluation mode
         self.model.eval()
         with torch.no_grad():
             for i_batch, t_batch in enumerate(data_loader):
-                batch_inputs = [t_batch[col].to(self.opt.device) for col in self.opt.inputs_cols]
-                batch_targets = t_batch["polarity"].to(self.opt.device)
-                batch_outputs = self.model(batch_inputs)
-                batch_preds = torch.argmax(batch_outputs, -1)
+                t_inputs = [t_batch[col].to(self.opt.device) for col in self.opt.inputs_cols]
+                t_targets = t_batch["polarity"].to(self.opt.device)
+                t_outputs = self.model(t_inputs)
 
-                n_correct += (batch_targets == batch_preds).sum().item()
-                n_total += len(batch_preds)
+                n_correct += (torch.argmax(t_outputs, -1) == t_targets).sum().item()
+                n_total += len(t_outputs)
 
-                gd_truths.extend([it.item() for it in batch_targets])
-                preds.extend([it.item() for it in batch_preds])
+                if t_targets_all is None:
+                    t_targets_all = t_targets
+                    t_outputs_all = t_outputs
+                else:
+                    t_targets_all = torch.cat((t_targets_all, t_targets), dim=0)
+                    t_outputs_all = torch.cat((t_outputs_all, t_outputs), dim=0)
 
         acc = n_correct / n_total
+        gd_truths = t_targets_all.cpu()
+        preds = torch.argmax(t_outputs_all, -1).cpu()
         f1 = metrics.f1_score(gd_truths, preds, labels=[0, 1, 2], average="macro")
+        return acc, f1, gd_truths, preds
 
-        outputs = {
-            "acc": acc,
-            "f1": f1,
-            "gd_truths": gd_truths,
-            "preds": preds,
-        }
-
-        return outputs
-
-    def run(self, run_num=5):
+    def run(self, model_name="chinese-bert-base", tag=0):
         # Loss and Optimizer
-        bert = BertModel.from_pretrained(self.opt.pretrained_bert_name)
-        self.model = self.opt.model_class(bert, self.opt).to(self.opt.device)
-        results = []
-        for i in range(run_num):
-            self.run_tag = str(i)
-            self.train()
-            eval_res = self.evaluate()
-            result_i = [eval_res["train_acc"], eval_res["train_f1"], eval_res["valid_acc"],
-                        eval_res["valid_f1"], eval_res["test_acc"], eval_res["test_f1"]]
-            results.append(result_i)
+        criterion = nn.CrossEntropyLoss()
+        _params = filter(lambda p: p.requires_grad, self.model.parameters())
+        optimizer = self.opt.optimizer(_params, lr=self.opt.lr, weight_decay=self.opt.l2reg)
 
-        return results
+        train_data_loader = DataLoader(dataset=self.train_dataset, batch_size=self.opt.batch_size, shuffle=True)
+        test_data_loader = DataLoader(dataset=self.test_dataset, batch_size=self.opt.batch_size, shuffle=False)
+        val_data_loader = DataLoader(dataset=self.valid_dataset, batch_size=self.opt.batch_size, shuffle=False)
+
+        self._reset_params()
+        best_model_path = self._train(criterion, optimizer, train_data_loader, val_data_loader)
+        self.model.load_state_dict(torch.load(best_model_path))
+        print("load model from %s" % best_model_path)
+        train_acc, train_f1, _, _ = self._evaluate_acc_f1(train_data_loader)
+        val_acc, val_f1, _, _ = self._evaluate_acc_f1(val_data_loader)
+        test_acc, test_f1, _, _ = self._evaluate_acc_f1(test_data_loader)
+        logger.info(">> train_acc: {:.4f}, train_f1: {:.4f}".format(train_acc, train_f1))
+        logger.info(">> val_acc: {:.4f}, val_f1: {:.4f}".format(val_acc, val_f1))
+        logger.info(">> test_acc: {:.4f}, test_f1: {:.4f}".format(test_acc, test_f1))
+
+        return [train_acc, train_f1, val_acc, val_f1, test_acc, test_f1]
 
     def result_analysis(self, data_loader, gd_truths, preds):
         tokenizer = Tokenizer4Bert(self.opt.max_seq_len, self.opt.pretrained_bert_name)
@@ -321,30 +258,148 @@ class Instructor:
 
 
 def main():
-    log_file = "{}-{}-{}.log".format(option.model_name, option.dataset, strftime("%y%m%d-%H%M", localtime()))
+    # Hyper Parameters
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--model_name", default="bert_spc", type=str)
+    parser.add_argument("--dataset", default="laptop", type=str, help="twitter, restaurant, laptop")
+    parser.add_argument("--optimizer", default="adam", type=str)
+    parser.add_argument("--initializer", default="xavier_uniform_", type=str)
+    parser.add_argument("--lr", default=2e-5, type=float, help="try 5e-5, 2e-5 for BERT, 1e-3 for others")
+    parser.add_argument("--dropout", default=0.1, type=float)
+    parser.add_argument("--l2reg", default=0.01, type=float)
+    parser.add_argument("--num_epoch", default=5, type=int, help="try larger number (>20) for non-BERT models")
+    parser.add_argument("--batch_size", default=32, type=int, help="try 16, 32, 64 for BERT models")
+    parser.add_argument("--log_step", default=10, type=int)
+    parser.add_argument("--embed_dim", default=300, type=int)
+    parser.add_argument("--hidden_dim", default=300, type=int)
+    parser.add_argument("--bert_dim", default=768, type=int)
+    parser.add_argument("--pretrained_bert_name", default="bert-base-uncased", type=str)
+    parser.add_argument("--max_seq_len", default=40, type=int)
+    parser.add_argument("--polarities_dim", default=3, type=int)
+    parser.add_argument("--hops", default=3, type=int)
+    parser.add_argument("--patience", default=5, type=int)
+    parser.add_argument("--device", default=None, type=str, help="e.g. cuda:0")
+    parser.add_argument("--data_dir", default="datasets/xp/", type=str, help="xp dataset")
+    parser.add_argument("--seed", default=1234, type=int, help="set seed for reproducibility")
+    parser.add_argument("--valid_dataset_ratio", default=0.1, type=float,
+                        help="set ratio between 0 and 1 for validation support")
+
+    # The following parameters are only valid for the lcf-bert model
+    parser.add_argument("--local_context_focus", default="cdm", type=str, help="local context focus mode, cdw or cdm")
+    parser.add_argument("--SRD", default=3, type=int,
+                        help="semantic-relative-distance, see the paper of LCF-BERT model")
+    opt = parser.parse_args()
+
+    if opt.seed is not None:
+        random.seed(opt.seed)
+        numpy.random.seed(opt.seed)
+        torch.manual_seed(opt.seed)
+        torch.cuda.manual_seed(opt.seed)
+        torch.backends.cudnn.benchmark = False
+        torch.backends.cudnn.deterministic = True
+        os.environ["PYTHONHASHSEED"] = str(opt.seed)
+
+    model_classes = {
+        'aoa': AOA,
+        'ian': IAN,
+        'ram': RAM,
+        'mgan': MGAN,
+        'asgcn': ASGCN,
+        'memnet': MemNet,
+        'cabasc': Cabasc,
+        'tnet_lf': TNet_LF,
+        'bert_spc': BERT_SPC,
+        'aen_bert': AEN_BERT,
+        'lcf_bert': LCF_BERT,
+        'lstm': LSTM,
+        'td_lstm': TD_LSTM,
+        'tc_lstm': TC_LSTM,
+        'atae_lstm': ATAE_LSTM,
+    }
+    dataset_files = {
+        'xp': {
+            'train': './datasets/xp/train.txt',
+            'test': './datasets/xp/train.txt',
+        },
+        'twitter': {
+            'train': './datasets/acl-14-short-data/train.raw',
+            'test': './datasets/acl-14-short-data/test.raw'
+        },
+        'restaurant': {
+            'train': './datasets/semeval14/Restaurants_Train.xml.seg',
+            'test': './datasets/semeval14/Restaurants_Test_Gold.xml.seg'
+        },
+        'laptop': {
+            'train': './datasets/semeval14/Laptops_Train.xml.seg',
+            'test': './datasets/semeval14/Laptops_Test_Gold.xml.seg'
+        },
+    }
+
+    input_cols = {
+        'lstm': ['text_indices'],
+        'aoa': ['text_indices', 'aspect_indices'],
+        'ian': ['text_indices', 'aspect_indices'],
+        'atae_lstm': ['text_indices', 'aspect_indices'],
+        'memnet': ['context_indices', 'aspect_indices'],
+        'aen_bert': ['text_bert_indices', 'aspect_bert_indices'],
+        'ram': ['text_indices', 'aspect_indices', 'left_indices'],
+        'mgan': ['text_indices', 'aspect_indices', 'left_indices'],
+        'bert_spc': ['concat_bert_indices', 'concat_segments_indices'],
+        'tnet_lf': ['text_indices', 'aspect_indices', 'aspect_in_text'],
+        'asgcn': ['text_indices', 'aspect_indices', 'left_indices', 'dependency_graph'],
+        'cabasc': ['text_indices', 'aspect_indices', 'left_with_aspect_indices', 'right_with_aspect_indices'],
+        'lcf_bert': ['concat_bert_indices', 'concat_segments_indices', 'text_bert_indices', 'aspect_bert_indices'],
+        'td_lstm': ['left_with_aspect_indices', 'right_with_aspect_indices'],
+        'tc_lstm': ['left_with_aspect_indices', 'right_with_aspect_indices', 'aspect_indices'],
+    }
+
+    initializers = {
+        "xavier_uniform_": torch.nn.init.xavier_uniform_,
+        "xavier_normal_": torch.nn.init.xavier_normal_,
+        "orthogonal_": torch.nn.init.orthogonal_,
+    }
+    optimizers = {
+        "sgd": torch.optim.SGD,
+        "asgd": torch.optim.ASGD,  # default lr=0.01
+        "adam": torch.optim.Adam,  # default lr=0.001
+        "adamax": torch.optim.Adamax,  # default lr=0.002
+        "rmsprop": torch.optim.RMSprop,  # default lr=0.01
+        "adagrad": torch.optim.Adagrad,  # default lr=0.01
+        "adadelta": torch.optim.Adadelta,  # default lr=1.0
+    }
+    opt.optimizer = optimizers[opt.optimizer]
+    opt.inputs_cols = input_cols[opt.model_name]
+    opt.model_class = model_classes[opt.model_name]
+    opt.dataset_file = dataset_files[opt.dataset]
+    opt.initializer = initializers[str(opt.initializer)]
+    if opt.device is None:
+        if torch.cuda.is_available():
+            opt.device = torch.device("cuda")
+        else:
+            opt.device = torch.device("cpu")
+    else:
+        opt.device = torch.device(str(opt.device))
+
+    log_file = "{}-{}-{}.log".format(opt.model_name, opt.dataset, strftime("%y%m%d-%H%M", localtime()))
     logger.addHandler(logging.FileHandler(log_file))
 
-    ins = Instructor(opt=option)
-    if option.do_train:
-        with open("train.log", "a") as writer:
-            model_name = option.pretrained_bert_name.split("/")[-1]
-            results = ins.run(run_num=5)
-            avg_result = numpy.mean(results, axis=0)
-            avg_result = [it.item() for it in avg_result]
-            # write logs
-            writer.write("pretrained model: {:s}, model architecture: {:s}\n".format(model_name, option.model_name))
-            writer.write("{:10s}{:10s}{:10s}{:10s}{:10s}{:10s}{:10s}\n".format("run_idx", "train_acc", "train_f1",
-                                                                               "valid_acc", "valid_f1",
-                                                                               "test_acc", "test_f1"))
-            for i, result_i in enumerate(results):
-                writer.write("%-10d%-10.4f%-10.4f%-10.4f%-10.4f%-10.4f%-10.4f\n" % tuple([i] + result_i))
-            writer.write("%-10s%-10.4f%-10.4f%-10.4f%-10.4f%-10.4f%-10.4f\n\n\n" % tuple(["avg"] + avg_result))
-
-    if option.do_eval:
-        ins.evaluate()
-
-    if option.do_test:
-        ins.test()
+    results = []
+    run_num = 5
+    model_name = opt.pretrained_bert_name.split("/")[-1]
+    with open("train.log", "a") as writer:
+        for i in range(run_num):
+            ins = Instructor(opt)
+            result_i = ins.run(model_name=model_name, tag=i)
+            results.append(result_i)
+        avg_result = numpy.mean(results, axis=0)
+        avg_result = [it.item() for it in avg_result]
+        # write logs
+        writer.write("pretrained model: {:s}, model architecture: {:s}\n".format(model_name, opt.model_name))
+        writer.write("{:8s}{:8s}{:8s}{:8s}{:8s}{:8s}{:8s}\n".format("run_idx", "train_acc", "train_f1", "valid_acc",
+                                                                    "valid_f1", "test_acc", "test_f1"))
+        for i in range(run_num):
+            writer.write("%8d%3.4f%3.4f%3.4f%3.4f%3.4f%3.4f\n" % tuple([i] + results[i]))
+        writer.write("%8s%3.4f%3.4f%3.4f%3.4f%3.4f%3.4f\n\n\n" % tuple(["avg"] + avg_result))
 
 
 if __name__ == "__main__":
