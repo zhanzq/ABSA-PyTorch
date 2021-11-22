@@ -119,6 +119,7 @@ class Instructor:
             # switch model to training mode
             self.model.train()
             for i_batch, batch in enumerate(train_data_loader):
+                self.global_step += 1
                 inputs = [batch[col].to(self.opt.device) for col in self.opt.inputs_cols]
                 targets = batch["polarity"].to(self.opt.device)
                 batch_correct, batch_loss = self.train_step(inputs, targets)
@@ -132,7 +133,6 @@ class Instructor:
                     break
 
     def do_log_step(self, batch_correct, batch_loss, batch_size, valid_data_loader=None):
-        self.global_step += 1
         self.n_total += batch_size
         self.loss_total += batch_loss * batch_size
         self.n_correct += batch_correct
@@ -241,13 +241,13 @@ class Instructor:
                 batch_inputs = [t_batch[col].to(self.opt.device) for col in self.opt.inputs_cols]
                 batch_targets = t_batch["polarity"].to(self.opt.device)
                 batch_outputs = self.model(batch_inputs)
-                batch_preds = torch.argmax(batch_outputs, -1).cpu()
+                batch_preds = torch.argmax(batch_outputs, -1)
 
                 n_correct += (batch_targets == batch_preds).sum().item()
                 n_total += len(batch_preds)
 
-                gd_truths.extend(batch_targets)
-                preds.extend(batch_preds)
+                gd_truths.extend([it.item() for it in batch_targets])
+                preds.extend([it.item() for it in batch_preds])
 
         acc = n_correct / n_total
         f1 = metrics.f1_score(gd_truths, preds, labels=[0, 1, 2], average="macro")
