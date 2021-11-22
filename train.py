@@ -108,7 +108,7 @@ class Instructor:
 
     def train(self,):
         train_data_loader = DataLoader(dataset=self.train_dataset, batch_size=self.opt.batch_size, shuffle=True)
-        valid_data_loader = DataLoader(dataset=self.valid_dataset, batch_size=self.opt.batch_size, shuffle=False)
+        valid_data_loader = DataLoader(dataset=self.valid_dataset, batch_size=self.opt.eval_batch_size, shuffle=False)
 
         self._reset_params()
         self.global_step, self.n_correct, self.n_total, self.loss_total = 0, 0, 0, 0
@@ -116,9 +116,9 @@ class Instructor:
         for i_epoch in range(self.opt.num_epoch):
             logger.info("*" * 40 + "epoch: {:-2d}".format(i_epoch) + "*" * 40)
 
-            # switch model to training mode
-            self.model.train()
             for i_batch, batch in enumerate(train_data_loader):
+                # switch model to training mode
+                self.model.train()
                 self.global_step += 1
                 inputs = [batch[col].to(self.opt.device) for col in self.opt.inputs_cols]
                 targets = batch["polarity"].to(self.opt.device)
@@ -127,8 +127,8 @@ class Instructor:
 
                 if self.global_step % self.opt.log_step == 0:
                     self.do_log_step(batch_correct, batch_loss, batch_size, valid_data_loader)
+                    self.update_model(cur_epoch=i_epoch)
 
-                self.update_model(cur_epoch=i_epoch)
                 if self.early_stop:
                     break
 
