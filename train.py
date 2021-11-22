@@ -7,6 +7,8 @@
 import os
 import sys
 import math
+import time
+
 import numpy
 import random
 import logging
@@ -85,12 +87,14 @@ class Instructor:
                         else:
                             stdev = 1. / math.sqrt(p.shape[0])
                             torch.nn.init.uniform_(p, a=-stdev, b=stdev)
+
     def _train(self, criterion, optimizer, train_data_loader, val_data_loader, model_name="None", tag=0):
         path = None
         max_val_f1 = 0
         max_val_acc = 0
         global_step = 0
         max_val_epoch = 0
+        start_time = time.time()
         for i_epoch in range(self.opt.num_epoch):
             logger.info(">" * 100)
             logger.info("epoch: {}".format(i_epoch))
@@ -115,10 +119,11 @@ class Instructor:
                 batch_loss = loss.item()
                 loss_total += batch_loss * batch_sz
                 if global_step % self.opt.log_step == 0:
+                    end_time = time.time()
                     train_acc = n_correct / n_total
                     train_loss = loss_total / n_total
                     logger.info("steps: %d, total avg loss: %.4f, batch_loss: %.4f, total avg acc: %.4f, \
-batch_acc: %.4f" % (global_step, train_loss, batch_loss, train_acc, batch_acc))
+batch_acc: %.4f, cost: %.3f s" % (global_step, train_loss, batch_loss, train_acc, batch_acc, end_time-start_time)/1000)
             val_acc, val_f1, _, _ = self._evaluate_acc_f1(val_data_loader)
             logger.info("> val_acc: {:.4f}, val_f1: {:.4f}".format(val_acc, val_f1))
             if val_acc > max_val_acc:
@@ -169,9 +174,19 @@ batch_acc: %.4f" % (global_step, train_loss, batch_loss, train_acc, batch_acc))
         criterion = nn.CrossEntropyLoss()
         _params = filter(lambda p: p.requires_grad, self.model.parameters())
         optimizer = self.opt.optimizer(_params, lr=self.opt.lr, weight_decay=self.opt.l2reg)
+        start_time = time.time()
         train_data_loader = DataLoader(dataset=self.train_dataset, batch_size=self.opt.batch_size, shuffle=True)
+        end_time = time.time()
+        print("load train data cost: %.3f second" % (end_time - start_time)/1000)
+        start_time = end_time
         test_data_loader = DataLoader(dataset=self.test_dataset, batch_size=self.opt.batch_size, shuffle=False)
+        end_time = time.time()
+        print("load valid data cost: %.3f second" % (end_time - start_time)/1000)
+        start_time = end_time
         val_data_loader = DataLoader(dataset=self.valid_dataset, batch_size=self.opt.batch_size, shuffle=False)
+        end_time = time.time()
+        print("load test data cost: %.3f second" % (end_time - start_time)/1000)
+        start_time = end_time
         self._reset_params()
         best_model_path = self._train(criterion, optimizer, train_data_loader, val_data_loader, model_name, tag)
         self.model.load_state_dict(torch.load(best_model_path))
@@ -222,6 +237,8 @@ batch_acc: %.4f" % (global_step, train_loss, batch_loss, train_acc, batch_acc))
                     for sentence in conf_sentence_set[gd_idx][pred_idx]:
                         writer.write("%s\n" % str(sentence))
                     writer.write("\n\n")
+
+
 def main():
     # Hyper Parameters
     parser = argparse.ArgumentParser()
