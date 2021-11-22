@@ -124,6 +124,7 @@ class Instructor:
                     train_loss = loss_total / n_total
                     logger.info("steps: %d, total avg loss: %.4f, batch_loss: %.4f, total avg acc: %.4f, \
 batch_acc: %.4f, cost: %.3f s" % (global_step, train_loss, batch_loss, train_acc, batch_acc, end_time-start_time))
+                start_time = end_time
             val_acc, val_f1, _, _ = self._evaluate_acc_f1(val_data_loader)
             logger.info("> val_acc: {:.4f}, val_f1: {:.4f}".format(val_acc, val_f1))
             if val_acc > max_val_acc:
