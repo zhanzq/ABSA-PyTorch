@@ -59,9 +59,9 @@ class Instructor:
             self.model = opt.model_class(embedding_matrix, opt).to(opt.device)
         data_dir = opt.data_dir
         train_data, valid_data, test_data = load_data(data_dir=data_dir, with_punctuation=False, tokenizer=tokenizer)
-        self.train_dataset = ABSADataset(train_data)
-        self.valid_dataset = ABSADataset(valid_data)
-        self.test_dataset = ABSADataset(test_data)
+        self.train_dataset = ABSADataset(train_data, tokenizer)
+        self.valid_dataset = ABSADataset(valid_data, tokenizer)
+        self.test_dataset = ABSADataset(test_data, tokenizer)
         if opt.device.type == "cuda":
             logger.info("cuda memory allocated: {}".format(torch.cuda.memory_allocated(device=opt.device.index)))
         self._print_args()
@@ -123,7 +123,7 @@ class Instructor:
                     train_acc = n_correct / n_total
                     train_loss = loss_total / n_total
                     logger.info("steps: %d, total avg loss: %.4f, batch_loss: %.4f, total avg acc: %.4f, \
-batch_acc: %.4f, cost: %.3f s" % (global_step, train_loss, batch_loss, train_acc, batch_acc, end_time-start_time)/1000)
+batch_acc: %.4f, cost: %.3f s" % (global_step, train_loss, batch_loss, train_acc, batch_acc, end_time-start_time))
             val_acc, val_f1, _, _ = self._evaluate_acc_f1(val_data_loader)
             logger.info("> val_acc: {:.4f}, val_f1: {:.4f}".format(val_acc, val_f1))
             if val_acc > max_val_acc:
@@ -177,15 +177,15 @@ batch_acc: %.4f, cost: %.3f s" % (global_step, train_loss, batch_loss, train_acc
         start_time = time.time()
         train_data_loader = DataLoader(dataset=self.train_dataset, batch_size=self.opt.batch_size, shuffle=True)
         end_time = time.time()
-        print("load train data cost: %.3f second" % (end_time - start_time)/1000)
+        print("load train data cost: %.3f second" % (end_time - start_time))
         start_time = end_time
         test_data_loader = DataLoader(dataset=self.test_dataset, batch_size=self.opt.batch_size, shuffle=False)
         end_time = time.time()
-        print("load valid data cost: %.3f second" % (end_time - start_time)/1000)
+        print("load valid data cost: %.3f second" % (end_time - start_time))
         start_time = end_time
         val_data_loader = DataLoader(dataset=self.valid_dataset, batch_size=self.opt.batch_size, shuffle=False)
         end_time = time.time()
-        print("load test data cost: %.3f second" % (end_time - start_time)/1000)
+        print("load test data cost: %.3f second" % (end_time - start_time))
         start_time = end_time
         self._reset_params()
         best_model_path = self._train(criterion, optimizer, train_data_loader, val_data_loader, model_name, tag)

@@ -10,8 +10,23 @@ import re
 import pickle
 import random
 import numpy as np
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, DataLoader
 from transformers import BertTokenizer
+
+import time
+from functools import wraps
+
+
+def time_cost(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        start_time = time.time()
+        ret_res = f(*args, **kwargs)
+        end_time = time.time()
+        print("%s cost time: %.3f seconds" % (f.__name__, end_time - start_time))
+        return ret_res
+
+    return decorated
 
 
 def build_tokenizer(data_files, max_seq_len, tokenizer_file):
@@ -184,18 +199,26 @@ def get_example(utt, aspect, polar=None, with_punctuation=False, tokenizer=None)
     return data
 
 
+@time_cost
 def get_dataset(lines, with_punctuation=False, tokenizer=None):
     all_data = []
     for line in lines:
         items = line.split("\t")
         assert len(items) == 3, "valid record must contain 3 columns, bad record: {:s}".format(line)
         utt, aspect, polar = items
-        data = get_example(utt=utt, aspect=aspect, polar=polar, with_punctuation=with_punctuation, tokenizer=tokenizer)
+        # data = get_example(utt=utt, aspect=aspect, polar=polar, with_punctuation=with_punctuation, tokenizer=tokenizer)
+        data = {
+            "utt": utt,
+            "aspect": aspect,
+            "polar": polar,
+        }
         all_data.append(data)
+        # yield data
 
     return all_data
 
 
+@time_cost
 def load_data(data_dir, with_punctuation=False, tokenizer=None, do_shuffle=True, splits=(0.7, 0.2, 0.1)):
     train_lines, valid_lines, test_lines = [], [], []
     assert os.path.isdir(data_dir), "input path must be data dir"
@@ -237,11 +260,27 @@ def load_data(data_dir, with_punctuation=False, tokenizer=None, do_shuffle=True,
 
 
 class ABSADataset(Dataset):
-    def __init__(self, data):
+    def __init__(self, data, tokenizer):
         self.data = data
+        self.tokenizer = tokenizer
 
     def __getitem__(self, index):
-        return self.data[index]
+        data_i = self.data[index]
+        utt = data_i["utt"]
+        aspect = data_i["aspect"]
+        polar = data_i["polar"]
+        return get_example(utt, aspect, polar=polar, tokenizer=self.tokenizer, with_punctuation=False)
+        # return self.data[index]
 
     def __len__(self):
         return len(self.data)
+
+
+if __name__ == "__main__":
+    pretrained_model_path = "/data/zhanzhiqiang/models/chinese-bert-base"
+    pretrained_model_path = "/Users/zhanzq/Downloads/models/bert-base-chinese"
+    tokenizer = Tokenizer4Bert(max_seq_len=40, pretrained_bert_name=pretrained_model_path)
+    train_dataset, valid_dataset, test_dataset = load_data(data_dir="./datasets/xp/", with_punctuation=False,
+                                                           tokenizer=tokenizer, do_shuffle=True, splits=(0.7, 0.2, 0.1))
+
+    train_data_loader = DataLoader(dataset=train_dataset, batch_size=32, shuffle=True)
