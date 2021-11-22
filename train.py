@@ -132,6 +132,7 @@ class Instructor:
                     break
 
     def do_log_step(self, batch_correct, batch_loss, batch_size, valid_data_loader=None):
+        self.global_step += 1
         self.n_total += batch_size
         self.loss_total += batch_loss * batch_size
         self.n_correct += batch_correct
