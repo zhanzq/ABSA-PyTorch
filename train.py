@@ -198,7 +198,7 @@ class Instructor:
         # load model
         assert os.path.exists(self.opt.best_model_path), "pretrained model must exist for evaluation"
         self.model.load_state_dict(torch.load(self.opt.best_model_path, map_location=self.opt.device))
-        print("load model from %s" % self.opt.best_model_path)
+        logger.info("load model from %s" % self.opt.best_model_path)
 
         # construct data loader
         train_data_loader = DataLoader(dataset=self.train_dataset, batch_size=self.opt.eval_batch_size,
@@ -234,7 +234,7 @@ class Instructor:
         # load model
         assert os.path.exists(self.opt.best_model_path), "pretrained model must exist for evaluation"
         self.model.load_state_dict(torch.load(self.opt.best_model_path))
-        print("load model from %s" % self.opt.best_model_path)
+        logger.info("load model from %s" % self.opt.best_model_path)
 
         # construct data loader
         test_data_loader = DataLoader(dataset=self.test_dataset, batch_size=self.opt.eval_batch_size,
@@ -353,9 +353,11 @@ def main():
             writer.write("%-10s%-10.4f%-10.4f%-10.4f%-10.4f%-10.4f%-10.4f\n\n\n" % tuple(["avg"] + avg_result))
 
     if option.do_eval:
+        ins = Instructor(opt=option)
         ins.evaluate()
 
     if option.do_test:
+        ins = Instructor(opt=option)
         ins.test()
 
 
