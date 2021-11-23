@@ -87,7 +87,7 @@ optimizers = {
 
 # Hyper Parameters
 parser = argparse.ArgumentParser()
-parser.add_argument("--model_name", default="bert_spc", type=str)
+parser.add_argument("--arch_name", default="bert_spc", type=str, help="model architecture")
 parser.add_argument("--dataset", default="xp", type=str, help="xp, twitter, restaurant, laptop")
 parser.add_argument("--optimizer", default="adam", type=str)
 parser.add_argument("--initializer", default="xavier_uniform_", type=str)
@@ -109,6 +109,7 @@ parser.add_argument("--hops", default=3, type=int)
 parser.add_argument("--patience", default=5, type=int)
 parser.add_argument("--device", default=None, type=str, help="e.g. cuda:0")
 parser.add_argument("--data_dir", default="datasets/xp/", type=str, help="xp dataset")
+parser.add_argument("--train_res_path", default="./res_train.txt", type=str, help="the file to record training res")
 parser.add_argument("--seed", default=1234, type=int, help="set seed for reproducibility")
 parser.add_argument("--do_train", default=False, type=bool, help="to train the model")
 parser.add_argument("--do_eval", default=True, type=bool, help="to evaluate the model")
@@ -123,8 +124,8 @@ parser.add_argument("--SRD", default=3, type=int,
 
 option = parser.parse_args()
 option.optimizer = optimizers[option.optimizer]
-option.inputs_cols = input_cols[option.model_name]
-option.model_class = model_classes[option.model_name]
+option.inputs_cols = input_cols[option.arch_name]
+option.model_class = model_classes[option.arch_name]
 option.dataset_file = dataset_files[option.dataset]
 option.initializer = initializers[str(option.initializer)]
 if option.device is None:
