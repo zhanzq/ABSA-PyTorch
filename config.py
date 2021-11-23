@@ -110,7 +110,7 @@ parser.add_argument("--patience", default=5, type=int)
 parser.add_argument("--device", default=None, type=str, help="e.g. cuda:0")
 parser.add_argument("--data_dir", default="datasets/xp/", type=str, help="xp dataset")
 parser.add_argument("--seed", default=1234, type=int, help="set seed for reproducibility")
-parser.add_argument("--do_train", default=True, type=bool, help="to train the model")
+parser.add_argument("--do_train", default=False, type=bool, help="to train the model")
 parser.add_argument("--do_eval", default=True, type=bool, help="to evaluate the model")
 parser.add_argument("--do_test", default=False, type=bool, help="to test the model")
 parser.add_argument("--valid_dataset_ratio", default=0.1, type=float,
