@@ -36,13 +36,14 @@ class Instructor:
 
     def __init__(self, opt):
         self.opt = opt
+        self.run_tag = ""
         self.early_stop = False
         self.criterion = nn.CrossEntropyLoss()
+        self.model_name = opt.pretrained_bert_name.split("/")[-1]
         self.n_total, self.global_step, self.n_correct, self.max_valid_epoch = 0, 0, 0, 0
-        self.max_valid_acc, self.max_valid_f1, self.valid_acc, self.valid_f1, self.loss_total = 0.0, 0.0, 0.0, 0.0, 0.0
-        self.model_name, self.run_tag = "", ""
+        self.max_valid_acc, self.valid_acc, self.valid_f1, self.loss_total = 0.0, 0.0, 0.0, 0.0
 
-        if "bert" in opt.model_name:
+        if "bert" in opt.arch_name:
             tokenizer = Tokenizer4Bert(opt.max_seq_len, opt.pretrained_bert_name)
             if "electra" in opt.pretrained_bert_name:
                 dct = torch.load(os.path.join(opt.pretrained_bert_name, "pytorch_model.bin"))
@@ -111,8 +112,7 @@ class Instructor:
     def train(self,):
         train_data_loader = DataLoader(dataset=self.train_dataset, num_workers=4,
                                        batch_size=self.opt.batch_size, shuffle=True)
-        valid_data_loader = DataLoader(dataset=self.valid_dataset, num_workers=4,
-                                       batch_size=self.opt.eval_batch_size, shuffle=False)
+        valid_data_loader = DataLoader(dataset=self.valid_dataset, num_workers=4, batch_size=self.opt.eval_batch_size)
 
         self._reset_params()
         self.global_step, self.n_correct, self.n_total, self.loss_total = 0, 0, 0, 0
@@ -176,23 +176,24 @@ class Instructor:
         # save new better model
         if not os.path.exists("state_dict"):
             os.mkdir("state_dict")
-        save_path = "state_dict/{0}_{1}_{2}_{3}.pt".format(self.opt.model_name, self.model_name, "%.4f" % self.valid_acc, self.run_tag)
+        save_path = "state_dict/{0}_{1}_{2}_{3}.pt".format(self.opt.arch_name, self.model_name,
+                                                           "%.4f" % self.valid_acc, self.run_tag)
         torch.save(self.model.state_dict(), save_path)
         logger.info(">> saved better model: {}".format(save_path))
         self.opt.best_model_path = save_path
 
-        org_path = "state_dict/{0}_{1}_{2}_{3}.pt".format(self.opt.model_name, self.model_name, "%.4f" % self.max_valid_acc, self.run_tag)
+        org_path = "state_dict/{0}_{1}_{2}_{3}.pt".format(self.opt.arch_name, self.model_name,
+                                                          "%.4f" % self.max_valid_acc, self.run_tag)
         if os.path.exists(org_path):
             os.remove(org_path)
             logger.info(">> remove older model: {}".format(org_path))
 
-        self.max_valid_acc = self.valid_acc
-        self.max_valid_epoch = cur_epoch
-        if self.valid_f1 > self.max_valid_f1:
-            self.max_valid_f1 = self.valid_f1
         if cur_epoch - self.max_valid_epoch >= self.opt.patience:
             logger.info(">> early stop.")
             self.early_stop = True
+
+        self.max_valid_acc = self.valid_acc
+        self.max_valid_epoch = cur_epoch
 
     def evaluate(self):
         # load model
@@ -201,49 +202,41 @@ class Instructor:
         logger.info("load model from %s" % self.opt.best_model_path)
 
         # construct data loader
-        train_data_loader = DataLoader(dataset=self.train_dataset, batch_size=self.opt.eval_batch_size,
-                                       num_workers=4, shuffle=False)
-        test_data_loader = DataLoader(dataset=self.test_dataset, batch_size=self.opt.eval_batch_size,
-                                      num_workers=4, shuffle=False)
-        valid_data_loader = DataLoader(dataset=self.valid_dataset, batch_size=self.opt.eval_batch_size,
-                                       num_workers=4, shuffle=False)
+        train_data_loader = DataLoader(dataset=self.train_dataset, batch_size=self.opt.eval_batch_size, num_workers=4)
+        test_data_loader = DataLoader(dataset=self.test_dataset, batch_size=self.opt.eval_batch_size, num_workers=4)
+        valid_data_loader = DataLoader(dataset=self.valid_dataset, batch_size=self.opt.eval_batch_size, num_workers=4)
 
         # calculate accuracy and f1
         train_res = self.evaluate_acc_f1(train_data_loader)
         valid_res = self.evaluate_acc_f1(valid_data_loader)
         test_res = self.evaluate_acc_f1(test_data_loader)
-        train_acc, train_f1 = train_res["acc"], train_res["f1"]
-        valid_acc, valid_f1 = valid_res["acc"], valid_res["f1"]
-        test_acc, test_f1 = test_res["acc"], test_res["f1"]
-        logger.info(">> train_acc: {:.4f}, train_f1: {:.4f}".format(train_acc, train_f1))
-        logger.info(">> valid_acc: {:.4f}, valid_f1: {:.4f}".format(valid_acc, valid_f1))
-        logger.info(">> test_acc: {:.4f}, test_f1: {:.4f}".format(test_acc, test_f1))
-
-        eval_res = {
-            "train_acc": train_acc,
-            "train_f1": train_f1,
-            "valid_acc": valid_acc,
-            "valid_f1": valid_f1,
-            "test_acc": test_acc,
-            "test_f1": test_f1,
-        }
+        results = [train_res, valid_res, test_res]
+        tags = ["train", "valid", "test"]
+        eval_res = {}
+        for tag, res in zip(tags, results):
+            acc, f1 = res["acc"], res["f1"]
+            eval_res["%s_acc" % tag], eval_res["%s_f1" % tag] = acc, f1
+            logger.info(">> {:s}: acc={:.4f}, f1={:.4f}".format(tag, acc, f1))
 
         return eval_res
 
     def test(self):
         # load model
-        assert os.path.exists(self.opt.best_model_path), "pretrained model must exist for evaluation"
+        assert os.path.exists(self.opt.best_model_path), "pretrained model must exist for test"
         self.model.load_state_dict(torch.load(self.opt.best_model_path))
         logger.info("load model from %s" % self.opt.best_model_path)
 
         # construct data loader
-        test_data_loader = DataLoader(dataset=self.test_dataset, batch_size=self.opt.eval_batch_size,
-                                      num_workers=4, shuffle=False)
+        test_data_loader = DataLoader(dataset=self.test_dataset, batch_size=self.opt.eval_batch_size, num_workers=4)
 
         # calculate accuracy and f1
         test_res = self.evaluate_acc_f1(test_data_loader)
-        test_acc, test_f1, gd_truths, preds = test_res["acc"], test_res["f1"], test_res["gd_truths"], test_res["preds"]
-        logger.info(">> test_acc: {:.4f}, test_f1: {:.4f}".format(test_acc, test_f1))
+        logger.info(">> test_acc: {:.4f}, test_f1: {:.4f}".format(test_res["acc"], test_res["f1"]))
+
+        # result analysis
+        self.result_analysis(test_data_loader, gd_truths=test_res["gd_truths"], preds=test_res["preds"])
+
+        return test_res
 
     def evaluate_acc_f1(self, data_loader):
         n_correct, n_total = 0, 0
@@ -281,7 +274,7 @@ class Instructor:
         self.train()
         eval_res = self.evaluate()
         result = [eval_res["train_acc"], eval_res["train_f1"], eval_res["valid_acc"],
-                    eval_res["valid_f1"], eval_res["test_acc"], eval_res["test_f1"]]
+                  eval_res["valid_f1"], eval_res["test_acc"], eval_res["test_f1"]]
 
         return result
 
@@ -327,8 +320,24 @@ class Instructor:
                     writer.write("\n\n")
 
 
+def record_train_results(opt, results):
+    with open(opt.train_res_path, "a") as writer:
+        model_name = opt.pretrained_bert_name.split("/")[-1]
+        arch_name = opt.arch_name
+        avg_result = numpy.mean(results, axis=0)
+        avg_result = [it.item() for it in avg_result]
+        # write logs
+        writer.write("pretrained model: {:s}, model architecture: {:s}\n".format(model_name, arch_name))
+        writer.write("{:10s}{:10s}{:10s}{:10s}{:10s}{:10s}{:10s}\n".format("run_idx", "train_acc", "train_f1",
+                                                                           "valid_acc", "valid_f1",
+                                                                           "test_acc", "test_f1"))
+        for i, result_i in enumerate(results):
+            writer.write("%-10d%-10.4f%-10.4f%-10.4f%-10.4f%-10.4f%-10.4f\n" % tuple([i] + result_i))
+        writer.write("%-10s%-10.4f%-10.4f%-10.4f%-10.4f%-10.4f%-10.4f\n\n\n" % tuple(["avg"] + avg_result))
+
+
 def main():
-    log_file = "{}-{}-{}.log".format(option.model_name, option.dataset, strftime("%y%m%d-%H%M", localtime()))
+    log_file = "{}-{}-{}.log".format(option.arch_name, option.dataset, strftime("%y%m%d-%H%M", localtime()))
     logger.addHandler(logging.FileHandler(log_file))
 
     if option.do_train:
@@ -338,19 +347,7 @@ def main():
             ins = Instructor(opt=option)
             result_i = ins.run(run_tag=str(i))
             results.append(result_i)
-            
-        with open("train.log", "a") as writer:
-            model_name = option.pretrained_bert_name.split("/")[-1]
-            avg_result = numpy.mean(results, axis=0)
-            avg_result = [it.item() for it in avg_result]
-            # write logs
-            writer.write("pretrained model: {:s}, model architecture: {:s}\n".format(model_name, option.model_name))
-            writer.write("{:10s}{:10s}{:10s}{:10s}{:10s}{:10s}{:10s}\n".format("run_idx", "train_acc", "train_f1",
-                                                                               "valid_acc", "valid_f1",
-                                                                               "test_acc", "test_f1"))
-            for i, result_i in enumerate(results):
-                writer.write("%-10d%-10.4f%-10.4f%-10.4f%-10.4f%-10.4f%-10.4f\n" % tuple([i] + result_i))
-            writer.write("%-10s%-10.4f%-10.4f%-10.4f%-10.4f%-10.4f%-10.4f\n\n\n" % tuple(["avg"] + avg_result))
+        record_train_results(opt=option, results=results)
 
     if option.do_eval:
         ins = Instructor(opt=option)
