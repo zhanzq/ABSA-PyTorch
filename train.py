@@ -69,6 +69,10 @@ class Instructor:
                 embedding_file="{0}_{1}_embedding_matrix.dat".format(str(opt.embed_dim), opt.dataset))
             self.model = opt.model_class(embedding_matrix, opt).to(opt.device)
 
+        # Loss and Optimizer
+        _params = filter(lambda p: p.requires_grad, self.model.parameters())
+        self.optimizer = self.opt.optimizer(_params, lr=self.opt.lr, weight_decay=self.opt.l2reg)
+
         train_data, valid_data, test_data = load_data(data_dir=opt.data_dir,
                                                       with_punctuation=False, tokenizer=tokenizer)
 
@@ -272,24 +276,14 @@ class Instructor:
 
         return outputs
 
-    def run(self, run_num=5):
-        bert = BertModel.from_pretrained(self.opt.pretrained_bert_name)
-        self.model_name = self.opt.pretrained_bert_name.split("/")[-1]
-        self.model = self.opt.model_class(bert, self.opt).to(self.opt.device)
-        # Loss and Optimizer
-        _params = filter(lambda p: p.requires_grad, self.model.parameters())
-        self.optimizer = self.opt.optimizer(_params, lr=self.opt.lr, weight_decay=self.opt.l2reg)
+    def run(self, run_tag):
+        self.run_tag = run_tag
+        self.train()
+        eval_res = self.evaluate()
+        result = [eval_res["train_acc"], eval_res["train_f1"], eval_res["valid_acc"],
+                    eval_res["valid_f1"], eval_res["test_acc"], eval_res["test_f1"]]
 
-        results = []
-        for i in range(run_num):
-            self.run_tag = str(i)
-            self.train()
-            eval_res = self.evaluate()
-            result_i = [eval_res["train_acc"], eval_res["train_f1"], eval_res["valid_acc"],
-                        eval_res["valid_f1"], eval_res["test_acc"], eval_res["test_f1"]]
-            results.append(result_i)
-
-        return results
+        return result
 
     def result_analysis(self, data_loader, gd_truths, preds):
         tokenizer = Tokenizer4Bert(self.opt.max_seq_len, self.opt.pretrained_bert_name)
@@ -337,11 +331,16 @@ def main():
     log_file = "{}-{}-{}.log".format(option.model_name, option.dataset, strftime("%y%m%d-%H%M", localtime()))
     logger.addHandler(logging.FileHandler(log_file))
 
-    ins = Instructor(opt=option)
     if option.do_train:
+        run_num = 5
+        results = []
+        for i in range(run_num):
+            ins = Instructor(opt=option)
+            result_i = ins.run(run_tag=str(i))
+            results.append(result_i)
+            
         with open("train.log", "a") as writer:
             model_name = option.pretrained_bert_name.split("/")[-1]
-            results = ins.run(run_num=5)
             avg_result = numpy.mean(results, axis=0)
             avg_result = [it.item() for it in avg_result]
             # write logs
