@@ -201,9 +201,12 @@ class Instructor:
         valid_data_loader = DataLoader(dataset=self.valid_dataset, batch_size=self.opt.eval_batch_size, shuffle=False)
 
         # calculate accuracy and f1
-        train_acc, train_f1, _, _ = self.evaluate_acc_f1(train_data_loader)
-        valid_acc, valid_f1, _, _ = self.evaluate_acc_f1(valid_data_loader)
-        test_acc, test_f1, _, _ = self.evaluate_acc_f1(test_data_loader)
+        train_res = self.evaluate_acc_f1(train_data_loader)
+        valid_res = self.evaluate_acc_f1(valid_data_loader)
+        test_res = self.evaluate_acc_f1(test_data_loader)
+        train_acc, train_f1 = train_res["acc"], train_res["f1"]
+        valid_acc, valid_f1 = valid_res["acc"], valid_res["f1"]
+        test_acc, test_f1 = test_res["acc"], test_res["f1"]
         logger.info(">> train_acc: {:.4f}, train_f1: {:.4f}".format(train_acc, train_f1))
         logger.info(">> valid_acc: {:.4f}, valid_f1: {:.4f}".format(valid_acc, valid_f1))
         logger.info(">> test_acc: {:.4f}, test_f1: {:.4f}".format(test_acc, test_f1))
@@ -229,7 +232,8 @@ class Instructor:
         test_data_loader = DataLoader(dataset=self.test_dataset, batch_size=self.opt.eval_batch_size, shuffle=False)
 
         # calculate accuracy and f1
-        test_acc, test_f1, gd_truths, preds = self.evaluate_acc_f1(test_data_loader)
+        test_res = self.evaluate_acc_f1(test_data_loader)
+        test_acc, test_f1, gd_truths, preds = test_res["acc"], test_res["f1"], test_res["gd_truths"], test_res["preds"]
         logger.info(">> test_acc: {:.4f}, test_f1: {:.4f}".format(test_acc, test_f1))
 
     def evaluate_acc_f1(self, data_loader):
