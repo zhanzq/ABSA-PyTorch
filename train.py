@@ -172,11 +172,12 @@ class Instructor:
         # save new better model
         if not os.path.exists("state_dict"):
             os.mkdir("state_dict")
-        save_path = "state_dict/{1}_{2}_{3}.pt".format(self.opt.model_name, self.model_name, self.run_tag)
+        save_path = "state_dict/{0}_{1}_{2}_{3}.pt".format(self.opt.model_name, self.model_name, "%.4f" % self.valid_acc, self.run_tag)
         torch.save(self.model.state_dict(), save_path)
         logger.info(">> saved better model: {}".format(save_path))
+        self.opt.best_model_path = save_path
 
-        org_path = "state_dict/{1}_{2}_{3}.pt".format(self.opt.model_name, self.model_name, self.run_tag)
+        org_path = "state_dict/{0}_{1}_{2}_{3}.pt".format(self.opt.model_name, self.model_name, "%.4f" % self.max_valid_acc, self.run_tag)
         if os.path.exists(org_path):
             os.remove(org_path)
             logger.info(">> remove older model: {}".format(org_path))
@@ -259,7 +260,7 @@ class Instructor:
                 gd_truths.extend([it.item() for it in batch_targets])
                 preds.extend([it.item() for it in batch_preds])
 
-        acc = n_correct / n_total
+        acc = n_correct / (n_total + 1.0e-5)
         f1 = metrics.f1_score(gd_truths, preds, labels=[0, 1, 2], average="macro")
 
         outputs = {

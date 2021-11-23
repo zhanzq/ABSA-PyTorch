@@ -225,15 +225,15 @@ def load_data(data_dir, with_punctuation=False, tokenizer=None, do_shuffle=True,
     files = os.listdir(data_dir)
     for file_name in files:
         data_path = os.path.join(data_dir, file_name)
-        if "train" in file_name:
+        if "train.txt" in file_name:
             with open(data_path, "r", encoding="utf-8", newline="\n", errors="ignore") as reader:
                 lines = reader.readlines()
                 train_lines.extend(lines)
-        elif "valid" in file_name:
+        elif "valid.txt" in file_name:
             with open(data_path, "r", encoding="utf-8", newline="\n", errors="ignore") as reader:
                 lines = reader.readlines()
                 valid_lines.extend(lines)
-        elif "test" in file_name:
+        elif "test.txt" in file_name:
             with open(data_path, "r", encoding="utf-8", newline="\n", errors="ignore") as reader:
                 lines = reader.readlines()
                 test_lines.extend(lines)
