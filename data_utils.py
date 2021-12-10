@@ -17,6 +17,41 @@ import time
 from functools import wraps
 
 
+REMAIN = re.compile(r"[\u4e00-\u9fa5a-zA-Z0-9.]+")
+ASR_RE = [
+    (
+        re.compile(r"(小批|小屁|小平|小佩|小片|小弟|小D|小贝)"),
+        "小P"
+    ),
+    (
+        re.compile(r"(牌号|拍号)"),
+        "排号"
+    ),
+    (
+        re.compile(r"拍个号"),
+        "排个号"
+    )
+]
+
+
+def asr_correct(text):
+    for compiler, sub in ASR_RE:
+        text = compiler.sub(sub, text)
+    return text
+
+
+def normalize(text):
+    """
+    1. 去掉无关字符
+    2. ASR纠错通过词表替换
+
+    :param text:
+    :return:
+    """
+    text = text.lower()
+    return asr_correct("".join(REMAIN.findall(text)))
+
+
 def time_cost(f):
     @wraps(f)
     def decorated(*args, **kwargs):
@@ -149,12 +184,14 @@ def rm_punctuation(text):
     return text
 
 
-def get_example(utt, aspect, polar=None, with_punctuation=False, tokenizer=None):
+def get_example(utt, aspect, polar=None, norm_text=True, tokenizer=None):
     polarity = None
     if polar is not None:
         polarity = int(polar) + 1
-    if not with_punctuation:
-        utt = rm_punctuation(text=utt)
+    if norm_text:
+        utt = normalize(text=utt)
+        if aspect != "[UNK]":
+            aspect = normalize(aspect)
     text_left, _, text_right = [s.strip() for s in utt.partition(aspect)]
 
     # if aspect != "[UNK]":

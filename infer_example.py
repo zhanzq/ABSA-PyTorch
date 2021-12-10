@@ -46,7 +46,7 @@ class Inference:
         torch.autograd.set_grad_enabled(False)
 
     def evaluate(self, text, aspect):
-        data = get_example(utt=text, aspect=aspect, polar=None, tokenizer=self.tokenizer)
+        data = get_example(utt=text, aspect=aspect, norm_text=True, polar=None, tokenizer=self.tokenizer)
         inputs = [torch.tensor([data[col]], device=self.opt.device) for col in self.opt.inputs_cols]
         outputs = self.model(inputs)
         probs = F.softmax(outputs, dim=-1).cpu().numpy()[0]
@@ -125,7 +125,7 @@ class Option(object):
             # self.pretrained_bert_name = "/opt/nas/xp-absa-boot/0.0.1/"  # for deployment on dev/test/pre environment
             # self.state_dict_path = '/opt/nas/xp-absa-boot/0.0.1/bert_spc_xp.bin'
         else:   # run on cpu locally
-            self.state_dict_path = 'state_dict/bert_spc_xp.bin'
+            self.state_dict_path = '/Users/zhanzq/Downloads/xp_absa_pytorch_model.bin'
             self.pretrained_bert_name = '/Users/zhanzq/Downloads/models/bert-base-chinese'
 
         self.SRD = 3
