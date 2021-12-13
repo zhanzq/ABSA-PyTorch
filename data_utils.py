@@ -52,6 +52,18 @@ def normalize(text):
     return asr_correct("".join(REMAIN.findall(text)))
 
 
+def round2(val):
+    if type(val) is str:
+        val = float(val)
+    return round(val*100)/100.0
+
+
+def round4(val):
+    if type(val) is str:
+        val = float(val)
+    return round(val*10000)/10000.0
+
+
 def time_cost(f):
     @wraps(f)
     def decorated(*args, **kwargs):
