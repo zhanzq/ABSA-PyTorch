@@ -136,7 +136,7 @@ class Option(object):
         self.local_context_focus = 'cdm'
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-        self.test_path = "/Users/zhanzq/github/ABSA-PyTorch/datasets/xp/test_1213.jsonl"
+        self.test_path = "/data/zhanzhiqiang/github/ABSA-PyTorch/datasets/xp/test_1213.jsonl"
 
 
 def main():
@@ -159,9 +159,9 @@ def main():
             obj["pred"] = pred - 1
             obj["sentiment"] = sentiment_lst[pred]
             obj["confidence"] = round4(confidence)
-            out_lines.append(json.dumps(obj, ensure_ascii=False))
+            out_lines.append(json.dumps(obj, ensure_ascii=False) + "\n")
             if pred != int(label) + 1:
-                err_lines.append(json.dumps(obj, ensure_ascii=False))
+                err_lines.append(json.dumps(obj, ensure_ascii=False) + "\n")
 
     with open("test_output.jsonl", "w") as writer:
         writer.writelines(out_lines)
