@@ -111,7 +111,7 @@ parser.add_argument("--device", default=None, type=str, help="e.g. cuda:0")
 parser.add_argument("--data_dir", default="datasets/xp/", type=str, help="xp dataset")
 parser.add_argument("--train_res_path", default="./res_train.txt", type=str, help="the file to record training res")
 parser.add_argument("--seed", default=1234, type=int, help="set seed for reproducibility")
-parser.add_argument("--do_train", default=False, type=bool, help="to train the model")
+parser.add_argument("--do_train", default=True, type=bool, help="to train the model")
 parser.add_argument("--do_eval", default=True, type=bool, help="to evaluate the model")
 parser.add_argument("--do_test", default=False, type=bool, help="to test the model")
 parser.add_argument("--valid_dataset_ratio", default=0.1, type=float,
@@ -126,7 +126,6 @@ option = parser.parse_args()
 option.optimizer = optimizers[option.optimizer]
 option.inputs_cols = input_cols[option.arch_name]
 option.model_class = model_classes[option.arch_name]
-option.dataset_file = dataset_files[option.dataset]
 option.initializer = initializers[str(option.initializer)]
 if option.device is None:
     if torch.cuda.is_available():
