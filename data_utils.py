@@ -249,13 +249,13 @@ def get_example(utt, aspect, polar=None, norm_text=True, tokenizer=None):
 
 
 @time_cost
-def get_dataset(lines, with_punctuation=False, tokenizer=None):
+def get_dataset(lines, norm_text=False, tokenizer=None):
     all_data = []
     for line in lines:
         items = line.split("\t")
         assert len(items) == 3, "valid record must contain 3 columns, bad record: {:s}".format(line)
         utt, aspect, polar = items
-        # data = get_example(utt=utt, aspect=aspect, polar=polar, with_punctuation=with_punctuation, tokenizer=tokenizer)
+        # data = get_example(utt=utt, aspect=aspect, polar=polar, norm_text=norm_text, tokenizer=tokenizer)
         data = {
             "utt": utt,
             "aspect": aspect,
@@ -268,7 +268,7 @@ def get_dataset(lines, with_punctuation=False, tokenizer=None):
 
 
 @time_cost
-def load_data(data_dir, with_punctuation=False, tokenizer=None, do_shuffle=True, splits=(0.7, 0.2, 0.1)):
+def load_data(data_dir, norm_text=False, tokenizer=None, do_shuffle=True, splits=(0.7, 0.2, 0.1)):
     train_lines, valid_lines, test_lines = [], [], []
     assert os.path.isdir(data_dir), "input path must be data dir"
     files = os.listdir(data_dir)
@@ -301,9 +301,9 @@ def load_data(data_dir, with_punctuation=False, tokenizer=None, do_shuffle=True,
         train_sz -= valid_sz
         valid_lines = train_lines[train_sz:train_sz + valid_sz]
 
-    train_data = get_dataset(train_lines, with_punctuation=with_punctuation, tokenizer=tokenizer)
-    valid_data = get_dataset(valid_lines, with_punctuation=with_punctuation, tokenizer=tokenizer)
-    test_data = get_dataset(test_lines, with_punctuation=with_punctuation, tokenizer=tokenizer)
+    train_data = get_dataset(train_lines, norm_text=norm_text, tokenizer=tokenizer)
+    valid_data = get_dataset(valid_lines, norm_text=norm_text, tokenizer=tokenizer)
+    test_data = get_dataset(test_lines, norm_text=norm_text, tokenizer=tokenizer)
 
     return train_data, valid_data, test_data
 
@@ -318,18 +318,22 @@ class ABSADataset(Dataset):
         utt = data_i["utt"]
         aspect = data_i["aspect"]
         polar = data_i["polar"]
-        return get_example(utt, aspect, polar=polar, tokenizer=self.tokenizer, with_punctuation=False)
+        return get_example(utt, aspect, polar=polar, tokenizer=self.tokenizer, norm_text=False)
         # return self.data[index]
 
     def __len__(self):
         return len(self.data)
 
 
-if __name__ == "__main__":
+def test():
     pretrained_model_path = "/data/zhanzhiqiang/models/chinese-bert-base"
     pretrained_model_path = "/Users/zhanzq/Downloads/models/bert-base-chinese"
     tokenizer = Tokenizer4Bert(max_seq_len=40, pretrained_bert_name=pretrained_model_path)
-    train_dataset, valid_dataset, test_dataset = load_data(data_dir="./datasets/xp/", with_punctuation=False,
+    train_dataset, valid_dataset, test_dataset = load_data(data_dir="./datasets/xp/", norm_text=False,
                                                            tokenizer=tokenizer, do_shuffle=True, splits=(0.7, 0.2, 0.1))
 
     train_data_loader = DataLoader(dataset=train_dataset, batch_size=32, shuffle=True)
+
+
+if __name__ == "__main__":
+    test()
