@@ -139,7 +139,7 @@ class Option(object):
         self.test_path = "/data/zhanzhiqiang/github/ABSA-PyTorch/datasets/xp/test_1213.jsonl"
 
 
-def main():
+def test_on_dataset():
     opt = Option()
     # set your trained models here
     # opt.state_dict_path = 'state_dict/ian_restaurant_acc0.7911'
@@ -170,6 +170,63 @@ def main():
         writer.writelines(err_lines)
 
 
+def test_on_sessions(session_path):
+    opt = Option()
+    # set your trained models here
+    # opt.state_dict_path = 'state_dict/ian_restaurant_acc0.7911'
+    # opt.state_dict_path = 'state_dict/bert_spc_xp_val_acc_0.9319'
+    sentiment_lst = ["negative", "neutral", "positive"]
+
+    inf = Inference(opt)
+    out_lines = []
+    err_lines = []
+    with open(session_path, "r") as reader:
+        for line in reader:
+            session = json.loads(line)
+            for turn in session["turns"]:
+                print(turn)
+                if turn["loc"] == "XP":
+                    continue
+                text = turn["utterance"]
+                anns = turn["annotations"]
+                if not anns:
+                    t_probs = inf.evaluate(text + "[UNK]", "[UNK]")
+                    pred = t_probs.argmax(axis=-1).item()
+                    confidence = t_probs[pred]
+
+                    obj = {"text": text, "aspect": "[UNK]", "label": 0}
+                    obj["pred"] = pred - 1
+                    obj["sentiment"] = sentiment_lst[pred]
+                    obj["confidence"] = round4(confidence)
+                    out_lines.append(json.dumps(obj, ensure_ascii=False) + "\n")
+
+                    if pred != 1:
+                        err_lines.append(json.dumps(obj, ensure_ascii=False) + "\n")
+                else:
+                    senti2id = {"否定": -1, "无观点": 0, "肯定": 1}
+                    for slot_type, slot_value, label_s in anns:
+                        label = senti2id[label_s]
+                        t_probs = inf.evaluate(text, slot_value)
+                        pred = t_probs.argmax(axis=-1).item()
+                        confidence = t_probs[pred]
+
+                        obj = {"text": text, "aspect": slot_value, "label": label}
+                        obj["pred"] = pred - 1
+                        obj["sentiment"] = sentiment_lst[pred]
+                        obj["confidence"] = round4(confidence)
+                        out_lines.append(json.dumps(obj, ensure_ascii=False) + "\n")
+
+                        if pred != label + 1:
+                            err_lines.append(json.dumps(obj, ensure_ascii=False) + "\n")
+                        
+    with open("test_output.jsonl", "w") as writer:
+        writer.writelines(out_lines)
+
+    with open("test_err.jsonl", "w") as writer:
+        writer.writelines(err_lines)
+
+
 if __name__ == '__main__':
-    main()
+    session_path = "datasets/xp/test_case_12.jsonl"
+    test_on_sessions(session_path)
 
