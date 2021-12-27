@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 python train.py \
-    --model_name bert_spc \
-    --dataset xp \
+    --arch_name bert_spc \
+    --data_dir datasets/xp/data_test \
     --pretrained_bert_name /Users/zhanzq/Downloads/models/bert-base-chinese \
-	--best_model_path state_dict/bert_spc_xp.bin
+	--best_model_path ~/Downloads/xp_absa_pytorch_model.bin
