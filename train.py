@@ -75,7 +75,7 @@ class Instructor:
         self.optimizer = self.opt.optimizer(_params, lr=self.opt.lr, weight_decay=self.opt.l2reg)
 
         train_data, valid_data, test_data = load_data(data_dir=opt.data_dir,
-                                                      with_punctuation=False, tokenizer=tokenizer)
+                                                      norm_text=False, tokenizer=tokenizer)
 
         self.train_dataset = ABSADataset(train_data, tokenizer)
         self.valid_dataset = ABSADataset(valid_data, tokenizer)
