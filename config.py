@@ -85,6 +85,18 @@ optimizers = {
     "adadelta": torch.optim.Adadelta,  # default lr=1.0
 }
 
+senti2id = {
+    "否定": 0,
+    "无观点": 1,
+    "肯定": 2,
+}
+
+id2senti = {
+    0: "否定",
+    1: "无观点",
+    2: "肯定",
+}
+
 # Hyper Parameters
 parser = argparse.ArgumentParser()
 parser.add_argument("--arch_name", default="bert_spc", type=str, help="model architecture")
