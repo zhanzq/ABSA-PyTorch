@@ -8,7 +8,6 @@
 import os
 import sys
 import math
-import time
 
 import numpy
 import logging
@@ -24,50 +23,38 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 
 from config import option
-from data_utils import load_data
-from data_utils import build_tokenizer, build_embedding_matrix, Tokenizer4Bert, ABSADataset
+from data_utils import load_data, round4
+from data_utils import Tokenizer4Bert, ABSADataset
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 logger.addHandler(logging.StreamHandler(sys.stdout))
 
 
-class Instructor:
+class Inference:
 
     def __init__(self, opt):
         self.opt = opt
-        self.run_tag = ""
         self.early_stop = False
         self.criterion = nn.CrossEntropyLoss()
         self.model_name = opt.pretrained_bert_name.split("/")[-1]
         self.max_valid_acc, self.valid_acc, self.valid_f1, self.loss_total = 0.0, 0.0, 0.0, 0.0
 
-        if "bert" in opt.arch_name:
-            tokenizer = Tokenizer4Bert(opt.max_seq_len, opt.pretrained_bert_name)
-            if "electra" in opt.pretrained_bert_name:
-                dct = torch.load(os.path.join(opt.pretrained_bert_name, "pytorch_model.bin"))
-                state_dict = {}
-                for key in dct:
-                    if key.startswith("electra."):
-                        state_dict[key[8:]] = dct[key]
-                    elif key.startswith("discriminator_predictions."):
-                        prefix_len = len("discriminator_predictions.")
-                        _key = "pooler." + key[prefix_len:]
-                        state_dict[_key] = dct[key]
-                bert = BertModel.from_pretrained(opt.pretrained_bert_name, state_dict=state_dict)
-            else:
-                bert = BertModel.from_pretrained(opt.pretrained_bert_name)
-            self.model = opt.model_class(bert, opt).to(opt.device)
+        tokenizer = Tokenizer4Bert(opt.max_seq_len, opt.pretrained_bert_name)
+        if "electra" in opt.pretrained_bert_name:
+            dct = torch.load(os.path.join(opt.pretrained_bert_name, "pytorch_model.bin"))
+            state_dict = {}
+            for key in dct:
+                if key.startswith("electra."):
+                    state_dict[key[8:]] = dct[key]
+                elif key.startswith("discriminator_predictions."):
+                    prefix_len = len("discriminator_predictions.")
+                    _key = "pooler." + key[prefix_len:]
+                    state_dict[_key] = dct[key]
+            bert = BertModel.from_pretrained(opt.pretrained_bert_name, state_dict=state_dict)
         else:
-            tokenizer = build_tokenizer(
-                data_files=[opt.dataset_file["train"], opt.dataset_file["test"]],
-                max_seq_len=opt.max_seq_len,
-                tokenizer_file="{0}_tokenizer.dat".format(opt.dataset))
-            embedding_matrix = build_embedding_matrix(
-                word2idx=tokenizer.word2idx,
-                embed_dim=opt.embed_dim,
-                embedding_file="{0}_{1}_embedding_matrix.dat".format(str(opt.embed_dim), opt.dataset))
-            self.model = opt.model_class(embedding_matrix, opt).to(opt.device)
+            bert = BertModel.from_pretrained(opt.pretrained_bert_name)
+        self.model = opt.model_class(bert, opt).to(opt.device)
 
         # Loss and Optimizer
         _params = filter(lambda p: p.requires_grad, self.model.parameters())
@@ -136,7 +123,7 @@ class Instructor:
     def test(self):
         # load model
         assert os.path.exists(self.opt.best_model_path), "pretrained model must exist for test"
-        self.model.load_state_dict(torch.load(self.opt.best_model_path))
+        self.model.load_state_dict(torch.load(self.opt.best_model_path, map_location=self.opt.device))
         logger.info("load model from %s" % self.opt.best_model_path)
 
         # construct data loader
@@ -144,13 +131,23 @@ class Instructor:
 
         # calculate accuracy and f1
         test_res = self.evaluate_acc_f1(test_data_loader)
-        acc, f1 = test_res["acc"], numpy.mean(test_res["f1"])
-        logger.info(">> test_acc: {:.4f}, test_f1: {:.4f}".format(acc, f1))
+        logger.info(">>> test result as follows:")
+        self.print_result_info(res=test_res)
 
         # result analysis
         self.result_analysis(test_data_loader, gd_truths=test_res["gd_truths"], preds=test_res["preds"])
 
         return test_res
+
+    @staticmethod
+    def print_result_info(res):
+        logger.info(">>> acc: {:.4f}".format(res["acc"]))
+        logger.info(">>> P: {:.4f}".format(numpy.mean(res["p_lst"])))
+        logger.info(">>> R: {:.4f}".format(numpy.mean(res["r_lst"])))
+        logger.info(">>> F1: {:.4f}".format(numpy.mean(res["f1_lst"])))
+        logger.info(">>> P list: {}".format(res["p_lst"]))
+        logger.info(">>> R list: {}".format(res["r_lst"]))
+        logger.info(">>> F1 list: {}".format(res["f1_lst"]))
 
     def evaluate_acc_f1(self, data_loader):
         n_correct, n_total = 0, 0
@@ -171,17 +168,16 @@ class Instructor:
                 gd_truths.extend([it.item() for it in batch_targets])
                 preds.extend([it.item() for it in batch_preds])
 
-        acc = n_correct / (n_total + 1.0e-5)
-        acc_lst = metrics.accuracy_score(gd_truths, preds)
+        acc = metrics.accuracy_score(gd_truths, preds)
         p_lst = metrics.precision_score(gd_truths, preds, labels=[0, 1, 2], average=None)
         r_lst = metrics.recall_score(gd_truths, preds, labels=[0, 1, 2], average=None)
         f1_lst = metrics.f1_score(gd_truths, preds, labels=[0, 1, 2], average=None)
 
         outputs = {
             "acc": acc,
-            "p_lst": p_lst,
-            "r_lst": r_lst,
-            "f1_lst": f1_lst,
+            "p_lst": [round4(it) for it in p_lst],
+            "r_lst": [round4(it) for it in r_lst],
+            "f1_lst": [round4(it) for it in f1_lst],
             "gd_truths": gd_truths,
             "preds": preds,
         }
@@ -204,30 +200,35 @@ class Instructor:
                 sentences.append((sentence, aspect))
         conf_sentence_set = [[[] for _ in range(3)] for _ in range(3)]
         for gd_idx, pred_idx, sentence in zip(gd_truths, preds, sentences):
-            gd_idx = gd_idx.item()
-            pred_idx = pred_idx.item()
+            if type(gd_idx) is not int:
+                gd_idx = gd_idx.item()
+            if type(pred_idx) is not int:
+                pred_idx = pred_idx.item()
             if gd_idx == pred_idx:
                 continue
             conf_sentence_set[gd_idx][pred_idx].append(sentence)
 
+        cm = confusion_matrix(gd_truths, preds, labels=[0, 1, 2])
         sentiment_lst = ["否定", "无观点", "肯定"]
-        with open("test_result_analysis.txt", "w") as writer:
-            cm = confusion_matrix(gd_truths, preds, labels=[0, 1, 2])
-            writer.write("test confusion matrix:\n")
-            writer.write("\t否定\t无观点\t肯定\n")
-            writer.write("否定\t%-4d\t%-4d\t%-4d\n" % (tuple(cm[0])))
-            writer.write("无观点\t%-4d\t%-4d\t%-4d\n" % (tuple(cm[1])))
-            writer.write("肯定\t%-4d\t%-4d\t%-4d\n\n" % (tuple(cm[2])))
-            for gd_idx in range(3):
-                for pred_idx in range(3):
-                    gd_senti = sentiment_lst[gd_idx]
-                    pred_senti = sentiment_lst[pred_idx]
-                    if len(conf_sentence_set[gd_idx][pred_idx]) == 0:
-                        continue
-                    writer.write("*" * 10 + " %s ==> %s " % (gd_senti, pred_senti) + "*" * 10 + "\n")
-                    for sentence in conf_sentence_set[gd_idx][pred_idx]:
-                        writer.write("%s\n" % str(sentence))
-                    writer.write("\n\n")
+        self.print_analysis_res(conf_metrix=cm, sentiment_labels=sentiment_lst, conf_sentence_set=conf_sentence_set)
+
+    @staticmethod
+    def print_analysis_res(conf_metrix, sentiment_labels, conf_sentence_set):
+        logger.info("\n\ntest confusion matrix:")
+        logger.info("       \t{:4s}\t{:4s}\t{:4s}".format(*sentiment_labels))
+        for i, label in enumerate(sentiment_labels):
+            logger.info("{:3s}\t{:-4d}\t{:-4d}\t{:-4d}".format(label, *list(conf_metrix[i])))
+        for gd_idx in range(3):
+            for pred_idx in range(3):
+                gd_senti = sentiment_labels[gd_idx]
+                pred_senti = sentiment_labels[pred_idx]
+                if len(conf_sentence_set[gd_idx][pred_idx]) == 0:
+                    continue
+                logger.info("\n\n" + "*" * 10 + " %s ==> %s " % (gd_senti, pred_senti) + "*" * 10)
+                for sentence in conf_sentence_set[gd_idx][pred_idx]:
+                    logger.info("%s" % str(sentence))
+
+                logger.info("\n")
 
 
 def main():
@@ -236,13 +237,13 @@ def main():
 
     if option.do_eval:
         logger.info(msg="evaluate train, valid, test datasets ...")
-        ins = Instructor(opt=option)
-        ins.evaluate()
+        inf = Inference(opt=option)
+        inf.evaluate()
 
     if option.do_test:
-        logging.log(msg="evaluate test dataset and analyze the results ...")
-        ins = Instructor(opt=option)
-        ins.test()
+        logger.info(msg="evaluate test dataset and analyze the results ...")
+        inf = Inference(opt=option)
+        inf.test()
 
 
 if __name__ == "__main__":
