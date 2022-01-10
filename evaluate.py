@@ -20,10 +20,11 @@ from transformers import BertModel
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torch.utils.data import DataLoader
 
 from config import option
-from data_utils import load_data, round4
+from data_utils import load_data, round4, get_example
 from data_utils import Tokenizer4Bert, ABSADataset
 
 logger = logging.getLogger()
@@ -40,7 +41,7 @@ class Inference:
         self.model_name = opt.pretrained_bert_name.split("/")[-1]
         self.max_valid_acc, self.valid_acc, self.valid_f1, self.loss_total = 0.0, 0.0, 0.0, 0.0
 
-        tokenizer = Tokenizer4Bert(opt.max_seq_len, opt.pretrained_bert_name)
+        self.tokenizer = Tokenizer4Bert(opt.max_seq_len, opt.pretrained_bert_name)
         if "electra" in opt.pretrained_bert_name:
             dct = torch.load(os.path.join(opt.pretrained_bert_name, "pytorch_model.bin"))
             state_dict = {}
@@ -61,11 +62,11 @@ class Inference:
         self.optimizer = self.opt.optimizer(_params, lr=self.opt.lr, weight_decay=self.opt.l2reg)
 
         train_data, valid_data, test_data = load_data(data_dir=opt.data_dir,
-                                                      norm_text=False, tokenizer=tokenizer)
+                                                      norm_text=False, tokenizer=self.tokenizer)
 
-        self.train_dataset = ABSADataset(train_data, tokenizer)
-        self.valid_dataset = ABSADataset(valid_data, tokenizer)
-        self.test_dataset = ABSADataset(test_data, tokenizer)
+        self.train_dataset = ABSADataset(train_data, tokenizer=self.tokenizer)
+        self.valid_dataset = ABSADataset(valid_data, tokenizer=self.tokenizer)
+        self.test_dataset = ABSADataset(test_data, tokenizer=self.tokenizer)
 
         if opt.device.type == "cuda":
             logger.info("cuda memory allocated: {}".format(torch.cuda.memory_allocated(device=opt.device.index)))
@@ -94,6 +95,15 @@ class Inference:
                         else:
                             stdev = 1. / math.sqrt(p.shape[0])
                             torch.nn.init.uniform_(p, a=-stdev, b=stdev)
+
+    def infer(self, text, aspect):
+        data = get_example(utt=text, aspect=aspect, norm_text=True, polar=None, tokenizer=self.tokenizer)
+
+        inputs = [torch.tensor([data[col]], device=self.opt.device) for col in self.opt.inputs_cols]
+        outputs = self.model(inputs)
+        probs = F.softmax(outputs, dim=-1).cpu().numpy()[0]
+
+        return probs
 
     def evaluate(self):
         # load model
@@ -232,7 +242,7 @@ class Inference:
 
 
 def main():
-    log_file = "{}-{}-{}.log".format(option.arch_name, option.dataset, strftime("%y%m%d-%H%M", localtime()))
+    log_file = "{}-{}-{}_evaluation.log".format(option.arch_name, option.dataset, strftime("%y%m%d-%H%M", localtime()))
     logger.addHandler(logging.FileHandler(log_file))
 
     if option.do_eval:
