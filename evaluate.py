@@ -57,10 +57,16 @@ class Inference:
             bert = BertModel.from_pretrained(opt.pretrained_bert_name)
         self.model = opt.model_class(bert, opt).to(opt.device)
 
-        # Loss and Optimizer
-        _params = filter(lambda p: p.requires_grad, self.model.parameters())
-        self.optimizer = self.opt.optimizer(_params, lr=self.opt.lr, weight_decay=self.opt.l2reg)
+        # load model
+        assert os.path.exists(self.opt.best_model_path), "pretrained model must exist for evaluation"
+        self.model.load_state_dict(torch.load(self.opt.best_model_path, map_location=self.opt.device))
+        logger.info("load model from %s" % self.opt.best_model_path)
 
+        # switch model to evaluation mode
+        self.model.eval()
+        torch.autograd.set_grad_enabled(False)
+
+        # load dataset
         train_data, valid_data, test_data = load_data(data_dir=opt.data_dir,
                                                       norm_text=False, tokenizer=self.tokenizer)
 
@@ -106,11 +112,6 @@ class Inference:
         return probs
 
     def evaluate(self):
-        # load model
-        assert os.path.exists(self.opt.best_model_path), "pretrained model must exist for evaluation"
-        self.model.load_state_dict(torch.load(self.opt.best_model_path, map_location=self.opt.device))
-        logger.info("load model from %s" % self.opt.best_model_path)
-
         # construct data loader
         train_data_loader = DataLoader(dataset=self.train_dataset, batch_size=self.opt.eval_batch_size, num_workers=4)
         test_data_loader = DataLoader(dataset=self.test_dataset, batch_size=self.opt.eval_batch_size, num_workers=4)
@@ -131,11 +132,6 @@ class Inference:
         return eval_res
 
     def test(self):
-        # load model
-        assert os.path.exists(self.opt.best_model_path), "pretrained model must exist for test"
-        self.model.load_state_dict(torch.load(self.opt.best_model_path, map_location=self.opt.device))
-        logger.info("load model from %s" % self.opt.best_model_path)
-
         # construct data loader
         test_data_loader = DataLoader(dataset=self.test_dataset, batch_size=self.opt.eval_batch_size, num_workers=4)
 
