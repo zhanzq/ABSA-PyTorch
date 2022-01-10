@@ -15,8 +15,6 @@ import logging
 
 from sklearn import metrics
 from time import strftime, localtime
-from sklearn.metrics import confusion_matrix
-
 from transformers import BertModel
 
 import torch
@@ -233,9 +231,6 @@ class Instructor:
         test_res = self.evaluate_acc_f1(test_data_loader)
         logger.info(">> test_acc: {:.4f}, test_f1: {:.4f}".format(test_res["acc"], test_res["f1"]))
 
-        # result analysis
-        self.result_analysis(test_data_loader, gd_truths=test_res["gd_truths"], preds=test_res["preds"])
-
         return test_res
 
     def evaluate_acc_f1(self, data_loader):
@@ -278,47 +273,6 @@ class Instructor:
 
         return result
 
-    def result_analysis(self, data_loader, gd_truths, preds):
-        tokenizer = Tokenizer4Bert(self.opt.max_seq_len, self.opt.pretrained_bert_name)
-        sentences = []
-        for batch_data in data_loader:
-            text_indices = batch_data["text_indices"]
-            aspect_indices = batch_data["aspect_indices"]
-            for text_ids, aspect_ids in zip(text_indices, aspect_indices):
-                text_ids = [text_id for text_id in text_ids if text_id != 0]
-                aspect_ids = [aspect_id for aspect_id in aspect_ids if aspect_id != 0]
-                text = tokenizer.tokenizer.convert_ids_to_tokens(text_ids)
-                aspect = tokenizer.tokenizer.convert_ids_to_tokens(aspect_ids)
-                sentence = "".join(text)
-                aspect = "".join(aspect)
-                sentences.append((sentence, aspect))
-        conf_sentence_set = [[[] for _ in range(3)] for _ in range(3)]
-        for gd_idx, pred_idx, sentence in zip(gd_truths, preds, sentences):
-            gd_idx = gd_idx.item()
-            pred_idx = pred_idx.item()
-            if gd_idx == pred_idx:
-                continue
-            conf_sentence_set[gd_idx][pred_idx].append(sentence)
-
-        sentiment_lst = ["否定", "无观点", "肯定"]
-        with open("test_result_analysis.txt", "w") as writer:
-            cm = confusion_matrix(gd_truths, preds, labels=[0, 1, 2])
-            writer.write("test confusion matrix:\n")
-            writer.write("\t否定\t无观点\t肯定\n")
-            writer.write("否定\t%-4d\t%-4d\t%-4d\n" % (tuple(cm[0])))
-            writer.write("无观点\t%-4d\t%-4d\t%-4d\n" % (tuple(cm[1])))
-            writer.write("肯定\t%-4d\t%-4d\t%-4d\n\n" % (tuple(cm[2])))
-            for gd_idx in range(3):
-                for pred_idx in range(3):
-                    gd_senti = sentiment_lst[gd_idx]
-                    pred_senti = sentiment_lst[pred_idx]
-                    if len(conf_sentence_set[gd_idx][pred_idx]) == 0:
-                        continue
-                    writer.write("*" * 10 + " %s ==> %s " % (gd_senti, pred_senti) + "*" * 10 + "\n")
-                    for sentence in conf_sentence_set[gd_idx][pred_idx]:
-                        writer.write("%s\n" % str(sentence))
-                    writer.write("\n\n")
-
 
 def record_train_results(opt, results):
     with open(opt.train_res_path, "a") as writer:
@@ -327,17 +281,17 @@ def record_train_results(opt, results):
         avg_result = numpy.mean(results, axis=0)
         avg_result = [it.item() for it in avg_result]
         # write logs
-        writer.write("pretrained model: {:s}, model architecture: {:s}\n".format(model_name, arch_name))
-        writer.write("{:10s}{:10s}{:10s}{:10s}{:10s}{:10s}{:10s}\n".format("run_idx", "train_acc", "train_f1",
-                                                                           "valid_acc", "valid_f1",
-                                                                           "test_acc", "test_f1"))
+        logger.info("pretrained model: {:s}, model architecture: {:s}\n".format(model_name, arch_name))
+        logger.info("{:10s}{:10s}{:10s}{:10s}{:10s}{:10s}{:10s}\n".format("run_idx", "train_acc", "train_f1",
+                                                                          "valid_acc", "valid_f1",
+                                                                          "test_acc", "test_f1"))
         for i, result_i in enumerate(results):
-            writer.write("%-10d%-10.4f%-10.4f%-10.4f%-10.4f%-10.4f%-10.4f\n" % tuple([i] + result_i))
-        writer.write("%-10s%-10.4f%-10.4f%-10.4f%-10.4f%-10.4f%-10.4f\n\n\n" % tuple(["avg"] + avg_result))
+            logger.info("%-10d%-10.4f%-10.4f%-10.4f%-10.4f%-10.4f%-10.4f\n" % tuple([i] + result_i))
+        logger.info("%-10s%-10.4f%-10.4f%-10.4f%-10.4f%-10.4f%-10.4f\n\n\n" % tuple(["avg"] + avg_result))
 
 
 def main():
-    log_file = "{}-{}-{}.log".format(option.arch_name, option.dataset, strftime("%y%m%d-%H%M", localtime()))
+    log_file = "{}-{}-{}_train.log".format(option.arch_name, option.dataset, strftime("%y%m%d-%H%M", localtime()))
     logger.addHandler(logging.FileHandler(log_file))
 
     if option.do_train:
