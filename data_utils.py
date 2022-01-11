@@ -77,7 +77,7 @@ def time_cost(f):
             elif type(arg) is int or type(arg) is float:
                 param_lst.append(str(arg))
             else:
-                param_lst.append(type(args))
+                param_lst.append(type(args).__name__)
 
         for key, arg in kwargs.items():
             if type(arg) is str:
