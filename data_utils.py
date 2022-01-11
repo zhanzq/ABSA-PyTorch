@@ -64,6 +64,17 @@ def round4(val):
     return round(val*10000)/10000.0
 
 
+def _convert_to_str(arg):
+    if type(arg) is str:
+        return arg
+    elif type(arg) is int or type(arg) is float or type(arg) is bool:
+        return str(arg)
+    elif callable(arg):
+        return arg.__name__
+    else:
+        return type(arg).__name__
+
+
 def time_cost(f):
     @wraps(f)
     def decorated(*args, **kwargs):
@@ -72,21 +83,10 @@ def time_cost(f):
         end_time = time.time()
         param_lst = []
         for arg in args:
-            if type(arg) is str:
-                param_lst.append(arg)
-            elif type(arg) is int or type(arg) is float:
-                param_lst.append(str(arg))
-            else:
-                param_lst.append(type(args).__name__)
+            param_lst.append(_convert_to_str(arg))
 
-        for key, arg in kwargs.items():
-            if type(arg) is str:
-                val = arg
-            elif type(arg) is int or type(arg) is float:
-                val = str(arg)
-            else:
-                val = type(arg).__name__
-            param_lst.append("{}={}".format(key, val))
+        for key, val in kwargs.items():
+            param_lst.append("{}={}".format(key, _convert_to_str(val)))
         params = ", ".join(param_lst)
         print("{}({}) cost time: {:.3f} seconds".format(f.__name__, params, end_time - start_time))
         return ret_res
