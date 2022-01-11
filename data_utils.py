@@ -70,8 +70,23 @@ def time_cost(f):
         start_time = time.time()
         ret_res = f(*args, **kwargs)
         end_time = time.time()
-        param_lst = [arg if type(arg) is str else str(arg) for arg in args]
-        param_lst.extend(["{}={}".format(key, val) for key, val in kwargs.items()])
+        param_lst = []
+        for arg in args:
+            if type(arg) is str:
+                param_lst.append(arg)
+            elif type(arg) is int or type(arg) is float:
+                param_lst.append(str(arg))
+            else:
+                param_lst.append(type(args))
+
+        for key, arg in kwargs.items():
+            if type(arg) is str:
+                val = arg
+            elif type(arg) is int or type(arg) is float:
+                val = str(arg)
+            else:
+                val = type(args)
+            param_lst.append("{}={}".format(key, val))
         params = ", ".join(param_lst)
         print("{}({}) cost time: {:.3f} seconds".format(f.__name__, params, end_time - start_time))
         return ret_res
