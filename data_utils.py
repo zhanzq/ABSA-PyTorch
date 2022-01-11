@@ -85,7 +85,7 @@ def time_cost(f):
             elif type(arg) is int or type(arg) is float:
                 val = str(arg)
             else:
-                val = type(arg)
+                val = type(arg).__name__
             param_lst.append("{}={}".format(key, val))
         params = ", ".join(param_lst)
         print("{}({}) cost time: {:.3f} seconds".format(f.__name__, params, end_time - start_time))
