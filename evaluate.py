@@ -121,15 +121,13 @@ class Inference:
         train_res = self.evaluate_acc_f1(train_data_loader)
         valid_res = self.evaluate_acc_f1(valid_data_loader)
         test_res = self.evaluate_acc_f1(test_data_loader)
-        results = [train_res, valid_res, test_res]
-        tags = ["train", "valid", "test"]
-        eval_res = {}
-        for tag, res in zip(tags, results):
-            acc, f1 = res["acc"], numpy.mean(res["f1_lst"])
-            eval_res["%s_acc" % tag], eval_res["%s_f1" % tag] = acc, f1
-            logger.info(">> {:s}: acc={:.4f}, f1={:.4f}".format(tag, acc, f1))
 
-        return eval_res
+        logger.info("\n\n>>> evaluation on train dataset:")
+        self.print_result_info(res=train_res)
+        logger.info("\n\n>>> evaluation on valid dataset:")
+        self.print_result_info(res=valid_res)
+        logger.info("\n\n>>> evaluation on test dataset:")
+        self.print_result_info(res=test_res)
 
     def test(self):
         # construct data loader
