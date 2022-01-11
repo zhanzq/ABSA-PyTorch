@@ -70,7 +70,10 @@ def time_cost(f):
         start_time = time.time()
         ret_res = f(*args, **kwargs)
         end_time = time.time()
-        print("%s cost time: %.3f seconds" % (f.__name__, end_time - start_time))
+        param_lst = [arg if type(arg) is str else str(arg) for arg in args]
+        param_lst.extend(["{}={}".format(key, val) for key, val in kwargs.items()])
+        params = ", ".join(param_lst)
+        print("{}({}) cost time: {:.3f} seconds".format(f.__name__, params, end_time - start_time))
         return ret_res
 
     return decorated
