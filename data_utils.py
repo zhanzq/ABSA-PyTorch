@@ -319,6 +319,7 @@ def load_data(data_dir, norm_text=False, tokenizer=None, do_shuffle=True, splits
         train_sz -= valid_sz
         valid_lines = train_lines[train_sz:train_sz + valid_sz]
 
+    train_lines = train_lines[:train_sz]
     train_data = get_dataset(train_lines, norm_text=norm_text, tokenizer=tokenizer)
     valid_data = get_dataset(valid_lines, norm_text=norm_text, tokenizer=tokenizer)
     test_data = get_dataset(test_lines, norm_text=norm_text, tokenizer=tokenizer)
