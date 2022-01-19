@@ -39,7 +39,6 @@ class Inference:
         self.early_stop = False
         self.criterion = nn.CrossEntropyLoss()
         self.model_name = opt.pretrained_bert_name.split("/")[-1]
-        self.max_valid_acc, self.valid_acc, self.valid_f1, self.loss_total = 0.0, 0.0, 0.0, 0.0
 
         self.tokenizer = Tokenizer4Bert(opt.max_seq_len, opt.pretrained_bert_name)
         if "electra" in opt.pretrained_bert_name:
